@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>양치기 생존 게임</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+            overflow: hidden;
+            background-color: #333;
+        }
+        canvas {
+            background-color: #6aa84f; /* 낮 배경색 */
+            cursor: pointer;
+            display: block;
+            border-radius: 0.5rem;
+        }
+        .hud-item {
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .modal {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        .modal-content {
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        .joystick {
+            width: 120px;
+            height: 120px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+        }
+        .joystick-handle {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            position: absolute;
+            top: 30px;
+            left: 30px;
+        }
+        /* 숫자 입력 필드의 화살표 숨기기 */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex items-center justify-center p-2">
+
+    <div id="game-container" class="relative w-full h-full max-w-screen-lg max-h-screen-md aspect-video">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- HUD -->
+        <div class="absolute top-2 left-2 right-2 flex justify-between items-start gap-2">
+            <div class="flex flex-col sm:flex-row gap-2">
+                <div id="time-hud" class="hud-item"><span>🕒</span> <span id="time-display">오전 06:00</span></div>
+                <div id="day-hud" class="hud-item"><span>🗓️</span> <span id="day-display">Day 1</span></div>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2 items-end">
+                 <div id="gold-hud" class="hud-item"><span>💰</span> <span id="gold-display">10</span></div>
+                 <div id="sheep-hud" class="hud-item"><span>🐑</span> <span id="sheep-display">5</span></div>
+                 <div id="hay-hud" class="hud-item"><span>🌾</span> <span id="hay-display">0</span></div>
+            </div>
+        </div>
+        
+        <!-- 개 상태 UI -->
+        <div id="dog-status-ui" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2"></div>
+
+        <!-- 상호작용 버튼들 -->
+        <div class="absolute bottom-2 right-2 flex flex-col gap-2">
+            <button id="hay-action-button" class="hidden hud-item"></button>
+            <button id="gate-button" class="hidden hud-item">🚪 문 닫기</button>
+            <button id="market-button" class="hidden hud-item">🛒 시장</button>
+            <button id="dog-command-all-button" class="hidden hud-item">🐾 전체 명령</button>
+        </div>
+
+        <!-- 조이스틱 (모바일 전용) -->
+        <div id="joystick" class="joystick hidden">
+            <div id="joystick-handle" class="joystick-handle"></div>
+        </div>
+
+    </div>
+
+    <!-- 모달 창들 -->
+    <div id="market-modal" class="modal hidden absolute inset-0 flex items-center justify-center p-4">
+        <div class="modal-content w-full max-w-lg p-6 rounded-lg shadow-xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">시장</h2>
+                <button onclick="game.ui.toggleMarketModal(false)" class="text-2xl font-bold">&times;</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div id="market-buy-section">
+                    <h3 class="font-bold mb-2 text-lg">구매</h3>
+                </div>
+                <div id="market-sell-section">
+                    <h3 class="font-bold mb-2 text-lg">판매</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="hay-modal" class="modal hidden absolute inset-0 flex items-center justify-center">
+        <div class="modal-content w-11/12 max-w-sm p-6 rounded-lg shadow-xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="hay-modal-title" class="text-2xl font-bold">건초 관리</h2>
+                <button onclick="game.ui.toggleHayModal(false)" class="text-2xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <p id="hay-modal-info"></p>
+                <div class="flex items-center justify-center gap-2">
+                    <button id="hay-quantity-minus" class="bg-gray-300 px-4 py-2 rounded-md font-bold">-</button>
+                    <input id="hay-quantity-input" type="number" class="w-24 text-center text-lg font-bold border rounded-md" value="1" min="1">
+                    <button id="hay-quantity-plus" class="bg-gray-300 px-4 py-2 rounded-md font-bold">+</button>
+                </div>
+                <input id="hay-quantity-slider" type="range" class="w-full" value="1" min="1">
+                <button id="hay-confirm-button" class="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sheep-info-modal" class="modal hidden absolute inset-0 flex items-center justify-center">
+        <div class="modal-content w-11/12 max-w-sm p-6 rounded-lg shadow-xl">
+             <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">양 정보</h2>
+                <button onclick="game.ui.toggleSheepInfoModal(false)" class="text-2xl font-bold">&times;</button>
+            </div>
+             <div class="space-y-4">
+                <div>
+                    <label for="sheep-name-input" class="block text-sm font-medium text-gray-700">이름</label>
+                    <input id="sheep-name-input" type="text" class="w-full p-2 border rounded-md mt-1">
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-700">상태</p>
+                    <p id="sheep-status-info" class="mt-1 p-2 bg-gray-100 rounded-md"></p>
+                </div>
+                <button id="sheep-info-confirm" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">확인</button>
+             </div>
+        </div>
+    </div>
+
+    <div id="dog-info-modal" class="modal hidden absolute inset-0 flex items-center justify-center">
+        <div class="modal-content w-11/12 max-w-sm p-6 rounded-lg shadow-xl">
+             <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">개 정보</h2>
+                <button onclick="game.ui.toggleDogInfoModal(false)" class="text-2xl font-bold">&times;</button>
+            </div>
+             <div class="space-y-4">
+                <div>
+                    <label for="dog-name-input" class="block text-sm font-medium text-gray-700">이름</label>
+                    <input id="dog-name-input" type="text" class="w-full p-2 border rounded-md mt-1">
+                </div>
+                <button id="dog-info-confirm" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">확인</button>
+             </div>
+        </div>
+    </div>
+    
+    <div id="game-over-modal" class="modal hidden absolute inset-0 flex items-center justify-center">
+        <div class="modal-content w-11/12 max-w-md p-6 rounded-lg shadow-xl text-center">
+            <h2 class="text-3xl font-bold mb-4">게임 오버</h2>
+            <p id="game-over-stats" class="mb-6"></p>
+            <button onclick="window.location.reload()" class="bg-blue-500 text-white p-3 rounded-md hover:bg-blue-600 text-lg">다시 시작하기</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 게임 설정 ---
+        const config = {
+            TIME_SCALE: 100, // 시간 흐름 속도 (낮을수록 빠름)
+            DAY_DURATION: 12 * 60, // 12시간 (게임 시간 분 단위)
+            SHEPHERD_SPEED: 2,
+            SHEEP_SPEED: 1.5,
+            DOG_SPEED: 2.5,
+            WOLF_SPEED: 1.8,
+            WOLF_SPAWN_TIME: 21 * 60, // 오후 9시
+            GRASS_TILE_SIZE: 20,
+        };
+
+        // --- 유틸리티 함수 ---
+        const utils = {
+            distance(p1, p2) {
+                return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
+            },
+            isMobile() {
+                return /Mobi|Android/i.test(navigator.userAgent);
+            }
+        };
+        
+        // --- 게임 클래스 ---
+        class Game {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.entities = [];
+                this.leaderSheep = null;
+                this.gameState = {
+                    time: 6 * 60, // 오전 6시 시작
+                    day: 1,
+                    gold: 10,
+                    hayStock: 0,
+                    isNight: false,
+                    gameOver: false,
+                    paused: false,
+                };
+                this.world = {
+                    width: 2000,
+                    height: 1500,
+                    pasture: { 
+                        x: 800, y: 550, width: 400, height: 400, 
+                        gate: { x: 960, y: 950, width: 80, height: 20, isOpen: true },
+                        trough: { x: 820, y: 600, width: 100, height: 20, hayAmount: 0, maxHay: 10 },
+                        haystack: { x: 1150, y: 880, radius: 30 }
+                    },
+                    grassPatches: []
+                };
+
+                this.initializeGrassPatches([
+                    { x: 100, y: 100, width: 300, height: 200 },
+                    { x: 1500, y: 200, width: 400, height: 250 },
+                    { x: 200, y: 1100, width: 250, height: 250 },
+                    { x: 1600, y: 1200, width: 300, height: 200 },
+                ]);
+
+                this.camera = { x: 0, y: 0 };
+                this.input = new InputHandler(this);
+                this.ui = new UI(this);
+                this.market = new Market(this);
+                this.lastTime = 0;
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            initializeGrassPatches(patches) {
+                patches.forEach(p => {
+                    const patch = { ...p, tiles: [] };
+                    const cols = Math.floor(p.width / config.GRASS_TILE_SIZE);
+                    const rows = Math.floor(p.height / config.GRASS_TILE_SIZE);
+                    for (let r = 0; r < rows; r++) {
+                        patch.tiles[r] = [];
+                        for (let c = 0; c < cols; c++) {
+                            patch.tiles[r][c] = { richness: 1, maxRichness: 3 };
+                        }
+                    }
+                    this.world.grassPatches.push(patch);
+                });
+            }
+
+            // 게임 시작
+            start() {
+                this.shepherd = new Shepherd(this, this.world.pasture.x + 50, this.world.pasture.y + 50);
+                this.entities.push(this.shepherd);
+                this.entities.push(new Dog(this, this.shepherd.x - 30, this.shepherd.y));
+                for (let i = 0; i < 5; i++) {
+                    this.entities.push(new Sheep(this, this.world.pasture.x + 100 + Math.random() * 200, this.world.pasture.y + 100 + Math.random() * 200, true));
+                }
+                this.gameLoop(0);
+            }
+
+            // 메인 게임 루프
+            gameLoop(timestamp) {
+                if (this.gameState.gameOver) return;
+                const deltaTime = timestamp - this.lastTime;
+                this.lastTime = timestamp;
+                if (!this.gameState.paused) this.update(deltaTime);
+                this.draw();
+                requestAnimationFrame(this.gameLoop.bind(this));
+            }
+
+            // 게임 상태 업데이트
+            update(deltaTime) {
+                this.updateTime(deltaTime);
+                this.updateLeaderSheep();
+                this.entities = this.entities.filter(e => !e.isDead);
+                this.entities.forEach(e => e.update());
+                this.spawnWolves();
+                this.updateCamera();
+                this.ui.update();
+                this.checkGameOver();
+            }
+            
+            // 그리기
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.save();
+                this.ctx.translate(-this.camera.x, -this.camera.y);
+                this.drawBackground();
+                this.entities.sort((a, b) => a.y - b.y).forEach(e => e.draw(this.ctx));
+                this.ctx.restore();
+            }
+            
+            // 배경 그리기
+            drawBackground() {
+                this.ctx.fillStyle = this.gameState.isNight ? '#4a7c3a' : '#6aa84f';
+                this.ctx.fillRect(0, 0, this.world.width, this.world.height);
+                
+                // 풀밭 타일 그리기
+                this.world.grassPatches.forEach(p => {
+                    for (let r = 0; r < p.tiles.length; r++) {
+                        for (let c = 0; c < p.tiles[r].length; c++) {
+                            const tile = p.tiles[r][c];
+                            if (tile.richness > 0) {
+                                const alpha = tile.richness / tile.maxRichness * 0.7 + 0.3;
+                                this.ctx.fillStyle = this.gameState.isNight ? `rgba(56, 102, 65, ${alpha})` : `rgba(88, 129, 87, ${alpha})`;
+                                this.ctx.fillRect(p.x + c * config.GRASS_TILE_SIZE, p.y + r * config.GRASS_TILE_SIZE, config.GRASS_TILE_SIZE, config.GRASS_TILE_SIZE);
+                                
+                                // 풀 수치 표시
+                                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                                this.ctx.font = '10px sans-serif';
+                                this.ctx.textAlign = 'center';
+                                this.ctx.textBaseline = 'middle';
+                                this.ctx.fillText(Math.round(tile.richness), p.x + (c + 0.5) * config.GRASS_TILE_SIZE, p.y + (r + 0.5) * config.GRASS_TILE_SIZE);
+                            }
+                        }
+                    }
+                });
+
+                const p = this.world.pasture;
+                this.ctx.strokeStyle = '#8B4513';
+                this.ctx.lineWidth = 10;
+                this.ctx.strokeRect(p.x, p.y, p.width, p.height);
+                this.ctx.fillStyle = '#DAA520';
+                this.ctx.beginPath();
+                this.ctx.arc(p.haystack.x, p.haystack.y, p.haystack.radius, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.fillStyle = '#A0522D';
+                this.ctx.fillRect(p.trough.x, p.trough.y, p.trough.width, p.trough.height);
+                if (p.trough.hayAmount > 0) {
+                    this.ctx.fillStyle = '#f0e68c';
+                    const hayHeight = p.trough.height * (p.trough.hayAmount / p.trough.maxHay);
+                    this.ctx.fillRect(p.trough.x, p.trough.y + p.trough.height - hayHeight, p.trough.width, hayHeight);
+                }
+                const gate = p.gate;
+                if (gate.isOpen) {
+                    this.ctx.clearRect(gate.x, gate.y - 5, gate.width, gate.height);
+                } else {
+                    this.ctx.fillStyle = '#8B4513';
+                    this.ctx.fillRect(gate.x, gate.y - 5, gate.width, gate.height);
+                }
+            }
+
+            // 시간 관리
+            updateTime(deltaTime) {
+                this.gameState.time += deltaTime / config.TIME_SCALE;
+                if (this.gameState.time >= 24 * 60) {
+                    this.gameState.time = 0;
+                    this.gameState.day++;
+                    this.endOfDay();
+                }
+                const hour = Math.floor(this.gameState.time / 60);
+                this.gameState.isNight = hour >= 18 || hour < 6;
+                if (hour === 6 && Math.floor((this.gameState.time - deltaTime / config.TIME_SCALE) / 60) === 5) {
+                    this.startOfDay();
+                }
+            }
+            
+            // 하루 시작 시 처리
+            startOfDay() {
+                this.entities = this.entities.filter(e => !(e instanceof Wolf));
+                this.world.pasture.gate.isOpen = true;
+                if (this.gameState.day % 2 === 0) {
+                    this.world.grassPatches.forEach(p => {
+                        p.tiles.forEach(row => row.forEach(tile => {
+                            if (tile.richness < tile.maxRichness) {
+                                tile.richness++;
+                            }
+                        }));
+                    });
+                }
+                this.handleBreedingAndGrowth();
+            }
+
+            // 하루 종료 시 처리
+            endOfDay() {
+                this.entities.forEach(e => { if (e.endOfDay) e.endOfDay(); });
+            }
+
+            // 번식 및 성장
+            handleBreedingAndGrowth() {
+                const adultSheepInPasture = this.entities.filter(e => e instanceof Sheep && e.isAdult && !e.breedingCooldown && this.isInsidePasture(e));
+                let breedingPairs = Math.floor(adultSheepInPasture.length / 2);
+                for(let i = 0; i < breedingPairs; i++) {
+                    this.entities.push(new Sheep(this, this.world.pasture.x + this.world.pasture.width/2, this.world.pasture.y + this.world.pasture.height/2, false));
+                    adultSheepInPasture[i*2].breedingCooldown = 5;
+                    adultSheepInPasture[i*2+1].breedingCooldown = 5;
+                }
+            }
+
+            // 늑대 스폰
+            spawnWolves() {
+                if (this.gameState.isNight && this.gameState.time >= config.WOLF_SPAWN_TIME) {
+                    if (Math.random() < 0.001 * this.gameState.day) {
+                        const side = Math.floor(Math.random() * 4);
+                        let x, y;
+                        if (side === 0) { x = 0; y = Math.random() * this.world.height; }
+                        else if (side === 1) { x = this.world.width; y = Math.random() * this.world.height; }
+                        else if (side === 2) { x = Math.random() * this.world.width; y = 0; }
+                        else { x = Math.random() * this.world.width; y = this.world.height; }
+                        this.entities.push(new Wolf(this, x, y));
+                    }
+                }
+            }
+            
+            transferHay(direction, quantity) {
+                const trough = this.world.pasture.trough;
+                if (direction === 'toTrough') {
+                    const amount = Math.min(quantity, this.gameState.hayStock, trough.maxHay - trough.hayAmount);
+                    this.gameState.hayStock -= amount;
+                    trough.hayAmount += amount;
+                } else if (direction === 'fromTrough') {
+                    const amount = Math.min(quantity, trough.hayAmount);
+                    trough.hayAmount -= amount;
+                    this.gameState.hayStock += amount;
+                }
+            }
+
+            updateLeaderSheep() {
+                if (this.leaderSheep && !this.leaderSheep.isDead) return;
+
+                if (this.leaderSheep) {
+                    this.leaderSheep.isLeader = false;
+                    this.leaderSheep = null;
+                }
+
+                const adultSheep = this.entities.filter(e => e instanceof Sheep && e.isAdult).sort((a, b) => a.age - b.age);
+                if (adultSheep.length > 0) {
+                    this.leaderSheep = adultSheep[0];
+                    this.leaderSheep.isLeader = true;
+                }
+            }
+
+            updateCamera() {
+                this.camera.x = this.shepherd.x - this.canvas.width / 2;
+                this.camera.y = this.shepherd.y - this.canvas.height / 2;
+                this.camera.x = Math.max(0, Math.min(this.camera.x, this.world.width - this.canvas.width));
+                this.camera.y = Math.max(0, Math.min(this.camera.y, this.world.height - this.canvas.height));
+            }
+            
+            resizeCanvas() {
+                const container = document.getElementById('game-container');
+                this.canvas.width = container.clientWidth;
+                this.canvas.height = container.clientHeight;
+            }
+
+            checkGameOver() {
+                if (this.shepherd.hp <= 0 || (this.entities.filter(e => e instanceof Sheep).length === 0 && this.gameState.day > 1)) {
+                    this.gameState.gameOver = true;
+                    this.ui.showGameOverModal();
+                }
+            }
+
+            isInsidePasture(entity) {
+                const p = this.world.pasture;
+                return entity.x > p.x && entity.x < p.x + p.width && entity.y > p.y && entity.y < p.y + p.height;
+            }
+        }
+
+        class Character {
+            constructor(game, x, y, radius, color) {
+                this.game = game; this.x = x; this.y = y; this.radius = radius; this.color = color;
+                this.hp = 100; this.maxHp = 100; this.speed = 1; this.target = null; this.isDead = false;
+                this.name = '';
+            }
+            update() {
+                if (this.hp <= 0) this.isDead = true;
+                if (!this.game.gameState.isNight && this.hp < this.maxHp) this.hp += 0.01;
+                this.resolveCollisions();
+            }
+            draw(ctx) {
+                ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
+                
+                let barY = this.y - this.radius - 12;
+                if (this.name) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.textAlign = 'center';
+                    ctx.font = '10px sans-serif';
+                    ctx.fillText(this.name, this.x, barY - 2);
+                    barY -= 12;
+                }
+
+                if (this.hp < this.maxHp) {
+                    ctx.fillStyle = '#555'; ctx.fillRect(this.x - this.radius, barY, this.radius * 2, 5);
+                    const hpColor = this.hp > this.maxHp * 0.5 ? '#2ecc71' : (this.hp > this.maxHp * 0.25 ? '#f1c40f' : '#e74c3c');
+                    ctx.fillStyle = hpColor; ctx.fillRect(this.x - this.radius, barY, this.radius * 2 * (this.hp / this.maxHp), 5);
+                }
+            }
+            applyMovement(dx, dy) {
+                this.x += dx;
+                this.y += dy;
+            }
+            resolveCollisions() {
+                // Entity-Entity Collision
+                this.game.entities.forEach(other => {
+                    if (this === other || other.isDead) return;
+                    const dist = utils.distance(this, other);
+                    const minDist = this.radius + other.radius;
+                    if (dist < minDist) {
+                        const overlap = minDist - dist;
+                        const angle = Math.atan2(this.y - other.y, this.x - other.x);
+                        const pushX = Math.cos(angle) * overlap * 0.5;
+                        const pushY = Math.sin(angle) * overlap * 0.5;
+                        this.x += pushX; this.y += pushY;
+                        other.x -= pushX; other.y -= pushY;
+                    }
+                });
+
+                // World boundary
+                this.x = Math.max(this.radius, Math.min(this.x, this.game.world.width - this.radius));
+                this.y = Math.max(this.radius, Math.min(this.y, this.game.world.height - this.radius));
+
+                // Fence Collision
+                const p = this.game.world.pasture;
+                const g = p.gate;
+                const isInside = this.x > p.x && this.x < p.x + p.width && this.y > p.y && this.y < p.y + p.height;
+                
+                if (isInside) {
+                    if (this.x - this.radius < p.x) this.x = p.x + this.radius;
+                    if (this.x + this.radius > p.x + p.width) this.x = p.x + p.width - this.radius;
+                    if (this.y - this.radius < p.y) this.y = p.y + this.radius;
+                    // Bottom fence with gate
+                    if (this.y + this.radius > p.y + p.height) {
+                        const inGateX = this.x > g.x && this.x < g.x + g.width;
+                        if (!g.isOpen || !inGateX) {
+                            this.y = p.y + p.height - this.radius;
+                        }
+                    }
+                } else {
+                    const charBox = { left: this.x - this.radius, right: this.x + this.radius, top: this.y - this.radius, bottom: this.y + this.radius };
+                    const fenceBox = { left: p.x, right: p.x + p.width, top: p.y, bottom: p.y + p.height };
+                    if (charBox.right > fenceBox.left && charBox.left < fenceBox.right && charBox.bottom > fenceBox.top && charBox.top < fenceBox.bottom) {
+                        // Trying to enter from outside
+                        const inGateX = this.x > g.x && this.x < g.x + g.width;
+                        const atGateY = Math.abs(this.y - (p.y + p.height)) < this.radius;
+                        if (g.isOpen && inGateX && atGateY) {
+                            // Allow pass
+                        } else {
+                            // Push out
+                            const dx = (this.x - (p.x + p.width / 2));
+                            const dy = (this.y - (p.y + p.height / 2));
+                            const overlapX = (this.radius + p.width / 2) - Math.abs(dx);
+                            const overlapY = (this.radius + p.height / 2) - Math.abs(dy);
+                            if (overlapX < overlapY) {
+                                this.x += (dx > 0 ? overlapX : -overlapX);
+                            } else {
+                                this.y += (dy > 0 ? overlapY : -overlapY);
+                            }
+                        }
+                    }
+                }
+            }
+            moveTowards(target, speed) {
+                const angle = Math.atan2(target.y - this.y, target.x - this.x);
+                const dx = Math.cos(angle) * speed; const dy = Math.sin(angle) * speed;
+                this.applyMovement(dx, dy);
+            }
+        }
+
+        class Shepherd extends Character {
+            constructor(game, x, y) { super(game, x, y, 15, '#3498db'); this.speed = config.SHEPHERD_SPEED; }
+            update() {
+                const dxInput = this.game.input.moveX; const dyInput = this.game.input.moveY;
+                if (dxInput !== 0 || dyInput !== 0) {
+                    const magnitude = Math.sqrt(dxInput * dxInput + dyInput * dyInput);
+                    const dx = (dxInput / magnitude) * this.speed; const dy = (dyInput / magnitude) * this.speed;
+                    this.applyMovement(dx, dy);
+                }
+                super.update();
+            }
+        }
+        
+        class Sheep extends Character {
+            constructor(game, x, y, isAdult) {
+                super(game, x, y, isAdult ? 12 : 8, 'white');
+                this.speed = config.SHEEP_SPEED; this.hunger = 100; this.isAdult = isAdult; this.age = isAdult ? 7 : 0;
+                this.breedingCooldown = 0; this.state = 'wandering'; this.stateTimer = 0; this.maxHp = 50; this.hp = 50;
+                this.vx = 0; this.vy = 0; // Velocity for smooth movement
+                this.isLeader = false;
+                this.name = `양 #${Math.floor(Math.random() * 1000)}`;
+                this.perceptionRange = 250;
+            }
+            update() {
+                this.stateTimer -= 1; this.hunger -= 0.01;
+                if (this.hunger <= 0) { this.hp -= 0.02; this.hunger = 0; }
+                const dangers = this.game.entities.filter(e => 
+                    ((e instanceof Shepherd || e instanceof Dog) && utils.distance(this, e) < 100) ||
+                    (e instanceof Wolf && utils.distance(this, e) < 200)
+                );
+                const trough = this.game.world.pasture.trough; const inPasture = this.game.isInsidePasture(this);
+                const currentTileInfo = this.getCurrentTile();
+
+                // AI State Machine - Priority based
+                if (dangers.length > 0) { this.state = 'fleeing';
+                } else if (inPasture && trough.hayAmount > 0 && this.hunger < 50) { this.state = 'seeking_hay';
+                } else if (currentTileInfo && this.hunger < 100) { this.state = 'eating_grass';
+                } else if (this.hunger < 50 && !inPasture) { this.state = 'seeking_food';
+                } else if (!this.isAdult && this.findClosest(Sheep, 150, s => s.isAdult)) { this.state = 'following_adult';
+                } else if (!this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this && utils.distance(this, this.game.leaderSheep) < this.perceptionRange) { this.state = 'following_leader';
+                } else if (this.state !== 'wandering') { this.state = 'wandering'; this.stateTimer = 0; }
+                
+                let finalDx = 0, finalDy = 0;
+                switch(this.state) {
+                    case 'fleeing':
+                        let avgX = 0, avgY = 0; dangers.forEach(h => { avgX += h.x; avgY += h.y; }); avgX /= dangers.length; avgY /= dangers.length;
+                        const fleeAngle = Math.atan2(this.y - avgY, this.x - avgX);
+                        let fleeDx = Math.cos(fleeAngle);
+                        let fleeDy = Math.sin(fleeAngle);
+
+                        let flockDx = 0, flockDy = 0;
+                        const flockmates = this.game.entities.filter(e => e instanceof Sheep && e !== this && utils.distance(this, e) < 150);
+                        if (flockmates.length > 0) {
+                            let flockAvgX = 0, flockAvgY = 0;
+                            flockmates.forEach(fm => { flockAvgX += fm.x; flockAvgY += fm.y; });
+                            flockAvgX /= flockmates.length;
+                            flockAvgY /= flockmates.length;
+                            const angleToCenter = Math.atan2(flockAvgY - this.y, flockAvgX - this.x);
+                            flockDx = Math.cos(angleToCenter);
+                            flockDy = Math.sin(angleToCenter);
+                        }
+                        
+                        finalDx = (fleeDx * 1.0) + (flockDx * 0.5);
+                        finalDy = (fleeDy * 1.0) + (flockDy * 0.5);
+                        break;
+                    case 'following_leader':
+                        const leader = this.game.leaderSheep;
+                        if (leader) {
+                            if (utils.distance(this, leader) > 60) {
+                                const angle = Math.atan2(leader.y - this.y, leader.x - this.x);
+                                finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                            }
+                        } else { this.state = 'wandering'; }
+                        break;
+                    case 'following_adult':
+                        const adult = this.findClosest(Sheep, 150, s => s.isAdult);
+                        if (adult) {
+                            if (utils.distance(this, adult) > 40) {
+                                const angle = Math.atan2(adult.y - this.y, adult.x - this.x);
+                                finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                            }
+                        } else { this.state = 'wandering'; }
+                        break;
+                    case 'eating_grass':
+                        this.hunger = Math.min(100, this.hunger + 5); 
+                        currentTileInfo.tileObject.richness = Math.max(0, currentTileInfo.tileObject.richness - 1);
+                        if (currentTileInfo.tileObject.richness <= 0) {
+                            this.target = this.findAdjacentTile(currentTileInfo.patch, currentTileInfo.r, currentTileInfo.c);
+                            if (this.target) {
+                                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                                finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                            }
+                        }
+                        break;
+                    case 'seeking_hay':
+                        const troughCenter = {x: trough.x + trough.width/2, y: trough.y + trough.height/2};
+                        if (utils.distance(this, troughCenter) < 20) {
+                            this.hunger = Math.min(100, this.hunger + 0.5); trough.hayAmount = Math.max(0, trough.hayAmount - 0.01);
+                        } else { this.target = troughCenter; }
+                        break;
+                    case 'seeking_food': case 'wandering':
+                        let wanderDx = 0, wanderDy = 0, cohesionDx = 0, cohesionDy = 0, separationDx = 0, separationDy = 0;
+                        if (this.stateTimer <= 0 || !this.target || (this.state === 'seeking_food' && utils.distance(this, this.target) < 10)) {
+                            this.target = (this.state === 'seeking_food') ? this.findClosestGrassTile() : { x: this.x + (Math.random() - 0.5) * 200, y: this.y + (Math.random() - 0.5) * 200 };
+                            this.stateTimer = Math.random() * 200 + 100;
+                        }
+                        if (this.target) {
+                            const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                            wanderDx = Math.cos(angle); wanderDy = Math.sin(angle);
+                        }
+                        const flockmatesWander = this.game.entities.filter(e => e instanceof Sheep && e !== this && utils.distance(this, e) < 150);
+                        if (flockmatesWander.length > 0 && this.state === 'wandering') {
+                            let avgX = 0, avgY = 0; flockmatesWander.forEach(fm => { avgX += fm.x; avgY += fm.y; }); avgX /= flockmatesWander.length; avgY /= flockmatesWander.length;
+                            const angleToCenter = Math.atan2(avgY - this.y, avgX - this.x);
+                            cohesionDx = Math.cos(angleToCenter) * 0.8; cohesionDy = Math.sin(angleToCenter) * 0.8;
+                            flockmatesWander.forEach(fm => {
+                                if (utils.distance(this, fm) < this.radius * 3) {
+                                    const angle = Math.atan2(this.y - fm.y, this.x - fm.x);
+                                    separationDx += Math.cos(angle); separationDy += Math.sin(angle);
+                                }
+                            });
+                        }
+                        finalDx = wanderDx + cohesionDx + separationDx; finalDy = wanderDy + cohesionDy + separationDy;
+                        break;
+                }
+                if (this.target && (this.state === 'seeking_hay' || this.state === 'seeking_food')) {
+                    const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                    finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                }
+                
+                let desiredVx = 0; let desiredVy = 0;
+                const magnitude = Math.sqrt(finalDx * finalDx + finalDy * finalDy);
+                if (magnitude > 0) {
+                    let currentSpeed = this.speed;
+                    if (this.state === 'fleeing') currentSpeed *= 1.2;
+                    else if (this.state === 'wandering') currentSpeed *= 0.5;
+                    desiredVx = (finalDx / magnitude) * currentSpeed;
+                    desiredVy = (finalDy / magnitude) * currentSpeed;
+                }
+                const steeringFactor = 0.1; 
+                this.vx = this.vx * (1 - steeringFactor) + desiredVx * steeringFactor;
+                this.vy = this.vy * (1 - steeringFactor) + desiredVy * steeringFactor;
+                if (desiredVx === 0 && desiredVy === 0) { this.vx *= 0.95; this.vy *= 0.95; }
+                if (Math.abs(this.vx) > 0.01 || Math.abs(this.vy) > 0.01) { this.applyMovement(this.vx, this.vy); }
+                super.update();
+            }
+            draw(ctx) {
+                super.draw(ctx);
+                if (this.isLeader) {
+                    ctx.fillStyle = 'gold';
+                    ctx.font = '16px sans-serif';
+                    ctx.fillText('👑', this.x, this.y - this.radius - (this.name ? 25 : 15) - (this.hp < this.maxHp ? 12 : 0));
+                }
+                if (this.hunger < 100) {
+                    ctx.fillStyle = '#7a5c58'; ctx.fillRect(this.x - this.radius, this.y + this.radius + 2, this.radius * 2, 4);
+                    ctx.fillStyle = '#cdab7d'; ctx.fillRect(this.x - this.radius, this.y + this.radius + 2, this.radius * 2 * (this.hunger / 100), 4);
+                }
+            }
+            getCurrentTile() {
+                for (const patch of this.game.world.grassPatches) {
+                    if (this.x > patch.x && this.x < patch.x + patch.width && this.y > patch.y && this.y < patch.y + patch.height) {
+                        const c = Math.floor((this.x - patch.x) / config.GRASS_TILE_SIZE);
+                        const r = Math.floor((this.y - patch.y) / config.GRASS_TILE_SIZE);
+                        if (patch.tiles[r] && patch.tiles[r][c] && patch.tiles[r][c].richness > 0) {
+                            return { tileObject: patch.tiles[r][c], patch, r, c };
+                        }
+                    }
+                }
+                return null;
+            }
+            findAdjacentTile(patch, r, c) {
+                const neighbors = [[-1,0], [1,0], [0,-1], [0,1]];
+                for (const [dr, dc] of neighbors) {
+                    const newR = r + dr, newC = c + dc;
+                    if (patch.tiles[newR] && patch.tiles[newR][newC] && patch.tiles[newR][newC].richness > 0) {
+                        return { x: patch.x + (newC + 0.5) * config.GRASS_TILE_SIZE, y: patch.y + (newR + 0.5) * config.GRASS_TILE_SIZE };
+                    }
+                }
+                return null;
+            }
+            findClosestGrassTile() {
+                let closest = null;
+                let min_dist = this.perceptionRange;
+                this.game.world.grassPatches.forEach(p => {
+                    const patchCenter = { x: p.x + p.width / 2, y: p.y + p.height / 2 };
+                    if (utils.distance(this, patchCenter) > this.perceptionRange + Math.max(p.width, p.height) / 2) {
+                        return;
+                    }
+                    for (let r = 0; r < p.tiles.length; r++) {
+                        for (let c = 0; c < p.tiles[r].length; c++) {
+                            if (p.tiles[r][c].richness > 0) {
+                                const tilePos = { x: p.x + (c + 0.5) * config.GRASS_TILE_SIZE, y: p.y + (r + 0.5) * config.GRASS_TILE_SIZE };
+                                const d = utils.distance(this, tilePos);
+                                if (d < min_dist) {
+                                    min_dist = d;
+                                    closest = tilePos;
+                                }
+                            }
+                        }
+                    }
+                });
+                return closest;
+            }
+            findClosest(type, range, filter = () => true) {
+                let closest = null, min_dist = range;
+                this.game.entities.forEach(e => {
+                    if (e instanceof type && e !== this && filter(e)) { const d = utils.distance(this, e);
+                        if (d < min_dist) { min_dist = d; closest = e; }
+                    }
+                });
+                return closest;
+            }
+            endOfDay() {
+                this.age++;
+                if (!this.isAdult && this.age >= 7) { this.isAdult = true; this.radius = 12; }
+                if (this.breedingCooldown > 0) this.breedingCooldown--;
+            }
+        }
+
+        class Dog extends Character {
+            constructor(game, x, y) {
+                super(game, x, y, 13, '#a0522d'); this.speed = config.DOG_SPEED; this.command = 'follow';
+                this.maxHp = 150; this.hp = 150;
+                this.name = `개 #${Math.floor(Math.random() * 1000)}`;
+            }
+            update() {
+                const wolf = this.findClosest(Wolf, 200);
+                if (wolf) {
+                    this.target = wolf; this.moveTowards(this.target, this.speed);
+                    if (utils.distance(this, this.target) < this.radius + this.target.radius) this.target.hp -= 0.5;
+                } else {
+                    if (this.command === 'follow' && utils.distance(this, this.game.shepherd) > 50) {
+                        this.moveTowards(this.game.shepherd, this.speed);
+                    }
+                }
+                super.update();
+            }
+            findClosest(type, range) {
+                let closest = null, min_dist = range;
+                this.game.entities.forEach(e => {
+                    if (e instanceof type && !e.isDead) { const d = utils.distance(this, e);
+                        if (d < min_dist) { min_dist = d; closest = e; }
+                    }
+                });
+                return closest;
+            }
+        }
+        
+        class Wolf extends Character {
+            constructor(game, x, y) {
+                super(game, x, y, 16, '#555'); this.speed = config.WOLF_SPEED; this.maxHp = 100; this.hp = 100;
+            }
+            update() {
+                if (!this.target || this.target.isDead) this.target = this.findTarget();
+                if (this.target) {
+                    this.moveTowards(this.target, this.speed);
+                    if (utils.distance(this, this.target) < this.radius + this.target.radius) {
+                        this.target.hp -= 1;
+                        if (this.target instanceof Sheep) { this.target.hp = 0; this.isDead = true; }
+                    }
+                }
+                super.update();
+            }
+            findTarget() {
+                let potentialTargets = this.game.entities.filter(e => (e instanceof Sheep || e instanceof Dog || e instanceof Shepherd) && !e.isDead);
+                potentialTargets.sort((a,b) => utils.distance(this, a) - utils.distance(this, b));
+                return potentialTargets[0] || null;
+            }
+        }
+        
+        class InputHandler {
+            constructor(game) {
+                this.game = game; this.keys = {}; this.moveX = 0; this.moveY = 0;
+                window.addEventListener('keydown', e => this.keys[e.key] = true);
+                window.addEventListener('keyup', e => this.keys[e.key] = false);
+                this.joystick = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0, maxDistance: 50 };
+                if (utils.isMobile()) {
+                    document.getElementById('joystick').classList.remove('hidden');
+                    this.game.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this));
+                    this.game.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this));
+                    this.game.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
+                }
+                this.game.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
+                this.update();
+            }
+            update() {
+                this.moveX = 0; this.moveY = 0;
+                if (this.keys['w'] || this.keys['ArrowUp']) this.moveY = -1; if (this.keys['s'] || this.keys['ArrowDown']) this.moveY = 1;
+                if (this.keys['a'] || this.keys['ArrowLeft']) this.moveX = -1; if (this.keys['d'] || this.keys['ArrowRight']) this.moveX = 1;
+                if (this.joystick.active) {
+                    const dx = this.joystick.currentX - this.joystick.startX; const dy = this.joystick.currentY - this.joystick.startY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist > 0) { this.moveX = dx / dist; this.moveY = dy / dist; }
+                }
+                requestAnimationFrame(this.update.bind(this));
+            }
+            handleTouchStart(e) {
+                const touch = e.touches[0]; const rect = this.game.canvas.getBoundingClientRect();
+                const joystickBase = document.getElementById('joystick');
+                joystickBase.style.left = `${touch.clientX - rect.left - 60}px`; joystickBase.style.top = `${touch.clientY - rect.top - 60}px`;
+                this.joystick.active = true; this.joystick.startX = touch.clientX; this.joystick.startY = touch.clientY;
+                this.joystick.currentX = touch.clientX; this.joystick.currentY = touch.clientY;
+            }
+            handleTouchMove(e) {
+                if (!this.joystick.active) return; e.preventDefault();
+                const touch = e.touches[0]; this.joystick.currentX = touch.clientX; this.joystick.currentY = touch.clientY;
+                const dx = this.joystick.currentX - this.joystick.startX; const dy = this.joystick.currentY - this.joystick.startY;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                const handle = document.getElementById('joystick-handle');
+                if (dist > this.joystick.maxDistance) handle.style.transform = `translate(${dx/dist * this.joystick.maxDistance}px, ${dy/dist * this.joystick.maxDistance}px)`;
+                else handle.style.transform = `translate(${dx}px, ${dy}px)`;
+            }
+            handleTouchEnd(e) {
+                this.joystick.active = false; this.moveX = 0; this.moveY = 0;
+                document.getElementById('joystick-handle').style.transform = `translate(0px, 0px)`;
+            }
+            handleCanvasClick(e) {
+                if (this.game.gameState.paused) return;
+                const rect = this.game.canvas.getBoundingClientRect();
+                const worldX = e.clientX - rect.left + this.game.camera.x;
+                const worldY = e.clientY - rect.top + this.game.camera.y;
+
+                for (const entity of this.game.entities) {
+                    if (entity instanceof Sheep && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {
+                        this.game.ui.toggleSheepInfoModal(true, entity);
+                        return; 
+                    }
+                    if (entity instanceof Dog && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {
+                        this.game.ui.toggleDogInfoModal(true, entity);
+                        return;
+                    }
+                }
+            }
+        }
+        
+        class UI {
+            constructor(game) {
+                this.game = game;
+                this.timeDisplay = document.getElementById('time-display'); this.dayDisplay = document.getElementById('day-display');
+                this.goldDisplay = document.getElementById('gold-display'); this.sheepDisplay = document.getElementById('sheep-display');
+                this.hayDisplay = document.getElementById('hay-display'); this.gateButton = document.getElementById('gate-button');
+                this.marketButton = document.getElementById('market-button'); this.hayActionButton = document.getElementById('hay-action-button');
+                this.dogCommandAllButton = document.getElementById('dog-command-all-button'); this.dogStatusUI = document.getElementById('dog-status-ui');
+                this.gateButton.addEventListener('click', () => {
+                    this.game.world.pasture.gate.isOpen = false; 
+                    this.game.endOfDay();
+                    this.game.gameState.time = 6 * 60; 
+                    this.game.gameState.day++; 
+                    this.game.startOfDay();
+                });
+                this.marketButton.addEventListener('click', () => this.toggleMarketModal(true));
+                this.hayActionButton.addEventListener('click', () => {
+                    const distToHaystack = utils.distance(this.game.shepherd, this.game.world.pasture.haystack);
+                    const distToTrough = utils.distance(this.game.shepherd, {x: this.game.world.pasture.trough.x + 50, y: this.game.world.pasture.trough.y + 10});
+                    if (distToHaystack < 80) this.toggleHayModal(true, 'toTrough');
+                    else if (distToTrough < 80) this.toggleHayModal(true, 'fromTrough');
+                });
+                this.dogCommandAllButton.addEventListener('click', () => {
+                    const dogs = this.game.entities.filter(e => e instanceof Dog);
+                    if (dogs.length > 0) { const newCommand = dogs[0].command === 'follow' ? 'stay' : 'follow'; dogs.forEach(d => d.command = newCommand); }
+                });
+                this.dogStatusUI.addEventListener('click', (e) => {
+                    const dogDiv = e.target.closest('.dog-status-item'); 
+                    if (dogDiv) {
+                        const index = parseInt(dogDiv.dataset.dogIndex, 10);
+                        const dogs = this.game.entities.filter(d => d instanceof Dog);
+                        if (dogs[index]) {
+                            const dog = dogs[index];
+                            dog.command = dog.command === 'follow' ? 'stay' : 'follow';
+                        }
+                    }
+                });
+            }
+            update() {
+                const time = this.game.gameState.time; const hour = Math.floor(time / 60) % 24; const minute = Math.floor(time % 60);
+                const period = hour < 12 ? '오전' : '오후'; const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+                this.timeDisplay.textContent = `${period} ${String(displayHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                this.dayDisplay.textContent = `Day ${this.game.gameState.day}`; this.goldDisplay.textContent = this.game.gameState.gold;
+                this.sheepDisplay.textContent = this.game.entities.filter(e => e instanceof Sheep).length;
+                this.hayDisplay.textContent = this.game.gameState.hayStock;
+                const distToGate = utils.distance(this.game.shepherd, {x: this.game.world.pasture.gate.x + 40, y: this.game.world.pasture.gate.y + 10});
+                this.gateButton.classList.toggle('hidden', !(this.game.gameState.isNight && this.game.world.pasture.gate.isOpen && distToGate < 100));
+                const inPasture = this.game.isInsidePasture(this.game.shepherd);
+                this.marketButton.classList.toggle('hidden', !inPasture);
+                const distToHaystack = utils.distance(this.game.shepherd, this.game.world.pasture.haystack);
+                const distToTrough = utils.distance(this.game.shepherd, {x: this.game.world.pasture.trough.x + 50, y: this.game.world.pasture.trough.y + 10});
+                const canAddToTrough = inPasture && distToHaystack < 80;
+                const canTakeFromTrough = inPasture && distToTrough < 80;
+                this.hayActionButton.classList.toggle('hidden', !(canAddToTrough || canTakeFromTrough));
+                if (canAddToTrough) { this.hayActionButton.innerHTML = '🌾 건초 넣기'; }
+                else if (canTakeFromTrough) { this.hayActionButton.innerHTML = '↩️ 건초 되돌리기'; }
+                this.updateDogUI();
+            }
+            updateDogUI() {
+                const dogs = this.game.entities.filter(e => e instanceof Dog);
+                this.dogCommandAllButton.classList.toggle('hidden', dogs.length === 0);
+                this.dogStatusUI.innerHTML = '';
+                dogs.forEach((dog, index) => {
+                    const dogDiv = document.createElement('div');
+                    dogDiv.className = 'hud-item cursor-pointer dog-status-item'; 
+                    dogDiv.dataset.dogIndex = index;
+                    dogDiv.innerHTML = `<span>🐶 ${dog.name}</span> <span class="text-xs">${dog.command === 'follow' ? '따라와' : '기다려'}</span>`;
+                    this.dogStatusUI.appendChild(dogDiv);
+                });
+            }
+            toggleMarketModal(show) {
+                document.getElementById('market-modal').classList.toggle('hidden', !show);
+                this.game.gameState.paused = show;
+                if (show) this.setupMarketModal();
+            }
+            setupMarketModal() {
+                const buySection = document.getElementById('market-buy-section');
+                const sellSection = document.getElementById('market-sell-section');
+                buySection.innerHTML = `<h3 class="font-bold mb-2 text-lg">구매</h3>`;
+                sellSection.innerHTML = `<h3 class="font-bold mb-2 text-lg">판매</h3>`;
+                const createItemHTML = (name, price, current, action) => {
+                    return `
+                        <div class="bg-gray-100 p-3 rounded-md">
+                            <p class="font-semibold">${name} <span class="text-sm font-normal">(${price} 골드)</span></p>
+                            <p class="text-sm text-gray-600">보유: ${current}</p>
+                            <div class="flex items-center gap-2 mt-2">
+                                <input id="${action}-${name.replace(/ /g, '_')}-qty" type="number" value="1" min="1" class="w-16 text-center border rounded-md">
+                                <button onclick="game.market.${action}('${name.replace(/ /g, '_')}')" class="flex-1 bg-blue-500 text-white p-1 rounded-md text-sm">${action === 'buy' ? '구매' : '판매'}</button>
+                            </div>
+                        </div>`;
+                };
+                buySection.innerHTML += createItemHTML('새끼 양', 5, this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult).length, 'buy');
+                buySection.innerHTML += createItemHTML('어른 양', 10, this.game.entities.filter(e=>e instanceof Sheep && e.isAdult).length, 'buy');
+                buySection.innerHTML += createItemHTML('개', 50, this.game.entities.filter(e=>e instanceof Dog).length, 'buy');
+                buySection.innerHTML += createItemHTML('건초', 1, this.game.gameState.hayStock, 'buy');
+                sellSection.innerHTML += createItemHTML('새끼 양', 2, this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length, 'sell');
+                sellSection.innerHTML += createItemHTML('어른 양', 5, this.game.entities.filter(e=>e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length, 'sell');
+            }
+            toggleHayModal(show, direction = 'toTrough') {
+                document.getElementById('hay-modal').classList.toggle('hidden', !show);
+                this.game.gameState.paused = show;
+                if (show) this.setupHayModal(direction);
+            }
+            setupHayModal(direction) {
+                const title = document.getElementById('hay-modal-title');
+                const info = document.getElementById('hay-modal-info');
+                const input = document.getElementById('hay-quantity-input');
+                const slider = document.getElementById('hay-quantity-slider');
+                const confirmBtn = document.getElementById('hay-confirm-button');
+                const minusBtn = document.getElementById('hay-quantity-minus');
+                const plusBtn = document.getElementById('hay-quantity-plus');
+                const trough = this.game.world.pasture.trough;
+                let max = 0;
+                if (direction === 'toTrough') {
+                    title.textContent = "창고 → 먹이통";
+                    max = Math.floor(Math.min(this.game.gameState.hayStock, trough.maxHay - trough.hayAmount));
+                    info.textContent = `창고 보유량: ${this.game.gameState.hayStock}, 먹이통 여유: ${Math.floor(trough.maxHay - trough.hayAmount)}`;
+                } else {
+                    title.textContent = "먹이통 → 창고";
+                    max = Math.floor(trough.hayAmount);
+                    info.textContent = `먹이통 보유량: ${Math.floor(trough.hayAmount)}`;
+                }
+                input.max = max; slider.max = max;
+                input.value = max > 0 ? 1 : 0; slider.value = max > 0 ? 1 : 0;
+                const syncValues = (source) => {
+                    const value = Math.max(1, Math.min(max, parseInt(source.value)));
+                    input.value = value; slider.value = value;
+                };
+                input.oninput = () => syncValues(input);
+                slider.oninput = () => syncValues(slider);
+                minusBtn.onclick = () => { input.value = Math.max(1, parseInt(input.value) - 1); syncValues(input); };
+                plusBtn.onclick = () => { input.value = Math.min(max, parseInt(input.value) + 1); syncValues(input); };
+                confirmBtn.onclick = () => {
+                    const quantity = parseInt(input.value);
+                    if (quantity > 0 && quantity <= max) this.game.transferHay(direction, quantity);
+                    this.toggleHayModal(false);
+                };
+            }
+            toggleSheepInfoModal(show, sheep = null) {
+                const modal = document.getElementById('sheep-info-modal');
+                modal.classList.toggle('hidden', !show);
+                this.game.gameState.paused = show;
+
+                if (show && sheep) {
+                    const input = document.getElementById('sheep-name-input');
+                    const statusInfo = document.getElementById('sheep-status-info');
+                    const confirmBtn = document.getElementById('sheep-info-confirm');
+                    
+                    input.value = sheep.name;
+                    
+                    if (sheep.isAdult) {
+                        if (sheep.breedingCooldown > 0) {
+                            statusInfo.textContent = `생식까지 ${sheep.breedingCooldown}일 남음`;
+                        } else {
+                            statusInfo.textContent = '번식 가능';
+                        }
+                    } else {
+                        const daysToGrow = 7 - sheep.age;
+                        statusInfo.textContent = `성장까지 ${daysToGrow}일 남음`;
+                    }
+
+                    input.focus();
+                    confirmBtn.onclick = () => {
+                        if (input.value) {
+                            sheep.name = input.value.substring(0, 15);
+                        }
+                        this.toggleSheepInfoModal(false);
+                    };
+                }
+            }
+            toggleDogInfoModal(show, dog = null) {
+                const modal = document.getElementById('dog-info-modal');
+                modal.classList.toggle('hidden', !show);
+                this.game.gameState.paused = show;
+
+                if (show && dog) {
+                    const input = document.getElementById('dog-name-input');
+                    const confirmBtn = document.getElementById('dog-info-confirm');
+                    
+                    input.value = dog.name;
+                    input.focus();
+                    
+                    confirmBtn.onclick = () => {
+                        if (input.value) {
+                            dog.name = input.value.substring(0, 15);
+                        }
+                        this.toggleDogInfoModal(false);
+                    };
+                }
+            }
+            showGameOverModal() {
+                document.getElementById('game-over-modal').classList.remove('hidden');
+                document.getElementById('game-over-stats').textContent = `생존 일자: ${this.game.gameState.day}일, 보유 골드: ${this.game.gameState.gold}`;
+            }
+        }
+        
+        class Market {
+            constructor(game) { this.game = game; }
+            buy(item) {
+                const qty = parseInt(document.getElementById(`buy-${item}-qty`).value);
+                if (isNaN(qty) || qty <= 0) return;
+                const costs = { '새끼_양': 5, '어른_양': 10, '개': 50, '건초': 1 };
+                const totalCost = costs[item] * qty;
+                if (this.game.gameState.gold >= totalCost) {
+                    if (item === '개' && this.game.entities.filter(e => e instanceof Dog).length + qty > 3) { alert("개는 최대 3마리까지 보유할 수 있습니다."); return; }
+                    this.game.gameState.gold -= totalCost;
+                    const pos = {x: this.game.shepherd.x, y: this.game.shepherd.y};
+                    for(let i=0; i<qty; i++) {
+                        if (item === '새끼_양') this.game.entities.push(new Sheep(this.game, pos.x, pos.y, false));
+                        if (item === '어른_양') this.game.entities.push(new Sheep(this.game, pos.x, pos.y, true));
+                        if (item === '개') this.game.entities.push(new Dog(this.game, pos.x, pos.y));
+                        if (item === '건초') this.game.gameState.hayStock++;
+                    }
+                } else { alert("골드가 부족합니다."); }
+                this.game.ui.setupMarketModal();
+            }
+            sell(item) {
+                const qty = parseInt(document.getElementById(`sell-${item}-qty`).value);
+                if (isNaN(qty) || qty <= 0) return;
+                const prices = { '새끼_양': 2, '어른_양': 5 };
+                const isAdult = item === '어른_양';
+                const sheepToSell = this.game.entities.filter(e => e instanceof Sheep && e.isAdult === isAdult && this.game.isInsidePasture(e));
+                if (sheepToSell.length >= qty) {
+                    for(let i=0; i<qty; i++) sheepToSell[i].isDead = true;
+                    this.game.gameState.gold += prices[item] * qty;
+                } else { alert(`목장 안에 판매할 ${isAdult ? '어른 양' : '새끼 양'}이 부족합니다.`); }
+                this.game.ui.setupMarketModal();
+            }
+        }
+
+        // --- 게임 초기화 및 실행 ---
+        const canvas = document.getElementById('gameCanvas');
+        const game = new Game(canvas);
+        game.start();
+
+    </script>
+</body>
+</html>

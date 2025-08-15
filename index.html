@@ -207,6 +207,7 @@
         // --- 게임 클래스 ---
         class Game {
             constructor(canvas) {
+        this.idCounters = { dog: 0 };
                 this.canvas = canvas;
                 this.ctx = canvas.getContext('2d');
                 this.entities = [];
@@ -796,7 +797,8 @@
                 super(game, x, y, 13, '#a0522d'); this.speed = config.DOG_SPEED; this.command = 'follow';
                 this.maxHp = 150; this.hp = 150;
                 this.name = `개 #${Math.floor(Math.random() * 1000)}`;
-            }
+            
+                this.id = ++game.idCounters.dog;}
             update() {
                 const wolf = this.findClosest(Wolf, 200);
                 if (wolf) {
@@ -909,7 +911,8 @@
         
         class UI {
             constructor(game) {
-                this.game = game;
+                
+                this._dogStatusSnapshot = '';this.game = game;
                 this.timeDisplay = document.getElementById('time-display'); this.dayDisplay = document.getElementById('day-display');
                 this.goldDisplay = document.getElementById('gold-display'); this.sheepDisplay = document.getElementById('sheep-display');
                 this.hayDisplay = document.getElementById('hay-display'); this.gateButton = document.getElementById('gate-button');
@@ -934,17 +937,14 @@
                     if (dogs.length > 0) { const newCommand = dogs[0].command === 'follow' ? 'stay' : 'follow'; dogs.forEach(d => d.command = newCommand); }
                 });
                 this.dogStatusUI.addEventListener('click', (e) => {
-                    const dogDiv = e.target.closest('.dog-status-item'); 
-                    if (dogDiv) {
-                        const index = parseInt(dogDiv.dataset.dogIndex, 10);
-                        const dogs = this.game.entities.filter(d => d instanceof Dog);
-                        if (dogs[index]) {
-                            const dog = dogs[index];
-                            dog.command = dog.command === 'follow' ? 'stay' : 'follow';
-                        }
-                    }
+                    const dogDiv = e.target.closest('.dog-status-item');
+                    if (!dogDiv) return;
+                    const dogId = Number(dogDiv.dataset.dogId);
+                    const dog = this.game.entities.find(d => d instanceof Dog && d.id === dogId);
+                    if (!dog) return;
+                    dog.command = dog.command === 'follow' ? 'stay' : 'follow';
                 });
-            }
+}
             update() {
                 const time = this.game.gameState.time; const hour = Math.floor(time / 60) % 24; const minute = Math.floor(time % 60);
                 const period = hour < 12 ? '오전' : '오후'; const displayHour = hour % 12 === 0 ? 12 : hour % 12;
@@ -968,14 +968,19 @@
             updateDogUI() {
                 const dogs = this.game.entities.filter(e => e instanceof Dog);
                 this.dogCommandAllButton.classList.toggle('hidden', dogs.length === 0);
-                this.dogStatusUI.innerHTML = '';
-                dogs.forEach((dog, index) => {
-                    const dogDiv = document.createElement('div');
-                    dogDiv.className = 'hud-item cursor-pointer dog-status-item'; 
-                    dogDiv.dataset.dogIndex = index;
-                    dogDiv.innerHTML = `<span>🐶 ${dog.name}</span> <span class="text-xs">${dog.command === 'follow' ? '따라와' : '기다려'}</span>`;
-                    this.dogStatusUI.appendChild(dogDiv);
-                });
+                const _snapshot = dogs.map(d => `${d.id}:${d.command}:${d.name}`).join('|');
+                if (this._dogStatusSnapshot !== _snapshot) {
+                    this._dogStatusSnapshot = _snapshot;
+                    this.dogStatusUI.innerHTML = '';
+                    for (const dog of dogs) {
+                        const dogDiv = document.createElement('div');
+                        dogDiv.className = 'hud-item cursor-pointer dog-status-item';
+                        dogDiv.dataset.dogId = String(dog.id);
+                        const label = (dog.command === 'follow') ? '따라와' : '기다려';
+                        dogDiv.innerHTML = `<span>🐶 ${dog.name}</span> <span class="text-xs">${label}</span>`;
+                        this.dogStatusUI.appendChild(dogDiv);
+                    }
+                }
             }
             toggleMarketModal(show) {
                 document.getElementById('market-modal').classList.toggle('hidden', !show);

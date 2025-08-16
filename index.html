@@ -107,6 +107,7 @@
                 <h2 class="text-2xl font-bold">시장</h2>
                 <button onclick="game.ui.toggleMarketModal(false)" class="text-2xl font-bold">&times;</button>
             </div>
+            <div id="market-message" class="text-center text-red-600 mb-4 hidden"></div> <!-- Added for messages -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div id="market-buy-section">
                     <h3 class="font-bold mb-2 text-lg">구매</h3>
@@ -192,6 +193,7 @@
             WOLF_SPEED: 1.8,
             WOLF_SPAWN_TIME: 21 * 60, // 오후 9시
             GRASS_TILE_SIZE: 20,
+            GRASS_EATING_DELAY: 2000, // 풀을 먹는 딜레이 (밀리초)
         };
 
         // --- 유틸리티 함수 ---
@@ -290,7 +292,7 @@
                 this.updateTime(deltaTime);
                 this.updateLeaderSheep();
                 this.entities = this.entities.filter(e => !e.isDead);
-                this.entities.forEach(e => e.update());
+                this.entities.forEach(e => e.update(deltaTime)); // deltaTime 인자 추가
                 this.spawnWolves();
                 this.updateCamera();
                 this.ui.update();
@@ -479,7 +481,7 @@
                 this.hp = 100; this.maxHp = 100; this.speed = 1; this.target = null; this.isDead = false;
                 this.name = '';
             }
-            update() {
+            update(deltaTime) { // deltaTime 인자 추가
                 if (this.hp <= 0) this.isDead = true;
                 if (!this.game.gameState.isNight && this.hp < this.maxHp) this.hp += 0.01;
                 this.resolveCollisions();
@@ -575,14 +577,14 @@
 
         class Shepherd extends Character {
             constructor(game, x, y) { super(game, x, y, 15, '#3498db'); this.speed = config.SHEPHERD_SPEED; }
-            update() {
+            update(deltaTime) { // deltaTime 인자 추가
                 const dxInput = this.game.input.moveX; const dyInput = this.game.input.moveY;
                 if (dxInput !== 0 || dyInput !== 0) {
                     const magnitude = Math.sqrt(dxInput * dxInput + dyInput * dyInput);
                     const dx = (dxInput / magnitude) * this.speed; const dy = (dyInput / magnitude) * this.speed;
                     this.applyMovement(dx, dy);
                 }
-                super.update();
+                super.update(deltaTime);
             }
         }
         
@@ -595,8 +597,9 @@
                 this.isLeader = false;
                 this.name = `양 #${Math.floor(Math.random() * 1000)}`;
                 this.perceptionRange = 250;
+                this.eatingGrassTimer = 0; // 풀을 먹는 딜레이 타이머
             }
-            update() {
+            update(deltaTime) { // deltaTime 인자 추가
                 this.stateTimer -= 1; this.hunger -= 0.01;
                 if (this.hunger <= 0) { this.hp -= 0.02; this.hunger = 0; }
                 const dangers = this.game.entities.filter(e => 
@@ -606,16 +609,55 @@
                 const trough = this.game.world.pasture.trough; const inPasture = this.game.isInsidePasture(this);
                 const currentTileInfo = this.getCurrentTile();
 
+                // finalDx, finalDy를 함수 scope에서 선언
+                let finalDx = 0, finalDy = 0; 
+
                 // AI State Machine - Priority based
-                if (dangers.length > 0) { this.state = 'fleeing';
-                } else if (inPasture && trough.hayAmount > 0 && this.hunger < 50) { this.state = 'seeking_hay';
-                } else if (currentTileInfo && this.hunger < 100) { this.state = 'eating_grass';
-                } else if (this.hunger < 50 && !inPasture) { this.state = 'seeking_food';
-                } else if (!this.isAdult && this.findClosest(Sheep, 150, s => s.isAdult)) { this.state = 'following_adult';
-                } else if (!this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this && utils.distance(this, this.game.leaderSheep) < this.perceptionRange) { this.state = 'following_leader';
-                } else if (this.state !== 'wandering') { this.state = 'wandering'; this.stateTimer = 0; }
+                if (dangers.length > 0) {
+                    this.state = 'fleeing';
+                    this.eatingGrassTimer = 0; // 위험 감지 시 타이머 초기화
+                } else if (inPasture && trough.hayAmount > 0 && this.hunger < 50) {
+                    this.state = 'seeking_hay';
+                    this.eatingGrassTimer = 0;
+                } else if (currentTileInfo && this.hunger < 100) {
+                    // 풀 위에 있을 때만 먹기 상태로 전환
+                    if (this.state !== 'eating_grass') {
+                        // 처음 풀 위에 도달했을 때 타이머 시작
+                        this.eatingGrassTimer = config.GRASS_EATING_DELAY;
+                        this.state = 'eating_grass';
+                    } else if (this.eatingGrassTimer <= 0) {
+                        // 타이머가 만료되면 풀 소비
+                        this.hunger = Math.min(100, this.hunger + 5); 
+                        currentTileInfo.tileObject.richness = Math.max(0, currentTileInfo.tileObject.richness - 1);
+                        if (currentTileInfo.tileObject.richness <= 0) {
+                            this.target = this.findAdjacentTile(currentTileInfo.patch, currentTileInfo.r, currentTileInfo.c);
+                            if (this.target) {
+                                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                                finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                            }
+                        }
+                        this.eatingGrassTimer = config.GRASS_EATING_DELAY; // 다시 타이머 설정
+                    } else {
+                        // 풀을 먹는 중에는 움직임을 멈춤
+                        finalDx = 0;
+                        finalDy = 0;
+                        this.eatingGrassTimer -= deltaTime; // 딜레이 타이머 감소
+                    }
+                } else if (this.hunger < 50 && !inPasture) {
+                    this.state = 'seeking_food';
+                    this.eatingGrassTimer = 0;
+                } else if (!this.isAdult && this.findClosest(Sheep, 150, s => s.isAdult)) {
+                    this.state = 'following_adult';
+                    this.eatingGrassTimer = 0;
+                } else if (!this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this && utils.distance(this, this.game.leaderSheep) < this.perceptionRange) {
+                    this.state = 'following_leader';
+                    this.eatingGrassTimer = 0;
+                } else if (this.state !== 'wandering') {
+                    this.state = 'wandering';
+                    this.stateTimer = 0;
+                    this.eatingGrassTimer = 0;
+                }
                 
-                let finalDx = 0, finalDy = 0;
                 switch(this.state) {
                     case 'fleeing':
                         let avgX = 0, avgY = 0; dangers.forEach(h => { avgX += h.x; avgY += h.y; }); avgX /= dangers.length; avgY /= dangers.length;
@@ -657,13 +699,15 @@
                         } else { this.state = 'wandering'; }
                         break;
                     case 'eating_grass':
-                        this.hunger = Math.min(100, this.hunger + 5); 
-                        currentTileInfo.tileObject.richness = Math.max(0, currentTileInfo.tileObject.richness - 1);
-                        if (currentTileInfo.tileObject.richness <= 0) {
-                            this.target = this.findAdjacentTile(currentTileInfo.patch, currentTileInfo.r, currentTileInfo.c);
-                            if (this.target) {
-                                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                                finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                        // 풀을 먹는 딜레이 중에는 움직이지 않음 (finalDx, finalDy는 이미 위에서 0으로 설정됨)
+                        if (this.eatingGrassTimer <= 0) { // 타이머가 만료되었을 때만 이동 로직 수행
+                            // 풀 소비 후 인접 타일 탐색
+                            if (currentTileInfo.tileObject.richness <= 0) {
+                                this.target = this.findAdjacentTile(currentTileInfo.patch, currentTileInfo.r, currentTileInfo.c);
+                                if (this.target) {
+                                    const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                                    finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                                }
                             }
                         }
                         break;
@@ -685,7 +729,7 @@
                         }
                         const flockmatesWander = this.game.entities.filter(e => e instanceof Sheep && e !== this && utils.distance(this, e) < 150);
                         if (flockmatesWander.length > 0 && this.state === 'wandering') {
-                            let avgX = 0, avgY = 0; flockmatesWander.forEach(fm => { avgX += fm.x; avgY += fm.y; }); avgX /= flockmatesWander.length; avgY /= flockmatesWander.length;
+                            let avgX = 0, avgY = 0; flockmatesWander.forEach(fm => { avgX += fm.x; avgY += fm.y; }); avgX /= flockmatesWander.length; avgY /= flockmatesWander.length; 
                             const angleToCenter = Math.atan2(avgY - this.y, avgX - this.x);
                             cohesionDx = Math.cos(angleToCenter) * 0.8; cohesionDy = Math.sin(angleToCenter) * 0.8;
                             flockmatesWander.forEach(fm => {
@@ -698,6 +742,7 @@
                         finalDx = wanderDx + cohesionDx + separationDx; finalDy = wanderDy + cohesionDy + separationDy;
                         break;
                 }
+                // target이 설정된 상태에서 seeking_hay 또는 seeking_food일 경우, 해당 target으로 이동
                 if (this.target && (this.state === 'seeking_hay' || this.state === 'seeking_food')) {
                     const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
                     finalDx = Math.cos(angle); finalDy = Math.sin(angle);
@@ -712,12 +757,20 @@
                     desiredVx = (finalDx / magnitude) * currentSpeed;
                     desiredVy = (finalDy / magnitude) * currentSpeed;
                 }
-                const steeringFactor = 0.1; 
-                this.vx = this.vx * (1 - steeringFactor) + desiredVx * steeringFactor;
-                this.vy = this.vy * (1 - steeringFactor) + desiredVy * steeringFactor;
+
+                // 양이 풀을 먹는 중이 아닐 때만 움직임 적용
+                if (this.state === 'eating_grass' && this.eatingGrassTimer > 0) {
+                    this.vx = 0;
+                    this.vy = 0;
+                } else {
+                    const steeringFactor = 0.1; 
+                    this.vx = this.vx * (1 - steeringFactor) + desiredVx * steeringFactor;
+                    this.vy = this.vy * (1 - steeringFactor) + desiredVy * steeringFactor;
+                }
+
                 if (desiredVx === 0 && desiredVy === 0) { this.vx *= 0.95; this.vy *= 0.95; }
                 if (Math.abs(this.vx) > 0.01 || Math.abs(this.vy) > 0.01) { this.applyMovement(this.vx, this.vy); }
-                super.update();
+                super.update(deltaTime);
             }
             draw(ctx) {
                 super.draw(ctx);
@@ -799,7 +852,7 @@
                 this.name = `개 #${Math.floor(Math.random() * 1000)}`;
             
                 this.id = ++game.idCounters.dog;}
-            update() {
+            update(deltaTime) { // deltaTime 인자 추가
                 const wolf = this.findClosest(Wolf, 200);
                 if (wolf) {
                     this.target = wolf; this.moveTowards(this.target, this.speed);
@@ -809,7 +862,7 @@
                         this.moveTowards(this.game.shepherd, this.speed);
                     }
                 }
-                super.update();
+                super.update(deltaTime);
             }
             findClosest(type, range) {
                 let closest = null, min_dist = range;
@@ -826,7 +879,7 @@
             constructor(game, x, y) {
                 super(game, x, y, 16, '#555'); this.speed = config.WOLF_SPEED; this.maxHp = 100; this.hp = 100;
             }
-            update() {
+            update(deltaTime) { // deltaTime 인자 추가
                 if (!this.target || this.target.isDead) this.target = this.findTarget();
                 if (this.target) {
                     this.moveTowards(this.target, this.speed);
@@ -835,7 +888,7 @@
                         if (this.target instanceof Sheep) { this.target.hp = 0; this.isDead = true; }
                     }
                 }
-                super.update();
+                super.update(deltaTime);
             }
             findTarget() {
                 let potentialTargets = this.game.entities.filter(e => (e instanceof Sheep || e instanceof Dog || e instanceof Shepherd) && !e.isDead);
@@ -896,6 +949,7 @@
                 const worldX = e.clientX - rect.left + this.game.camera.x;
                 const worldY = e.clientY - rect.top + this.game.camera.y;
 
+                // Fix: Changed 'for (const entity = ...)' to 'for (const entity of ...)'
                 for (const entity of this.game.entities) {
                     if (entity instanceof Sheep && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {
                         this.game.ui.toggleSheepInfoModal(true, entity);
@@ -944,6 +998,8 @@
                     if (!dog) return;
                     dog.command = dog.command === 'follow' ? 'stay' : 'follow';
                 });
+
+                this.marketMessageDisplay = document.getElementById('market-message');
 }
             update() {
                 const time = this.game.gameState.time; const hour = Math.floor(time / 60) % 24; const minute = Math.floor(time % 60);
@@ -965,6 +1021,22 @@
                 else if (canTakeFromTrough) { this.hayActionButton.innerHTML = '↩️ 건초 되돌리기'; }
                 this.updateDogUI();
             }
+
+            showMessage(message, type = 'error') {
+                this.marketMessageDisplay.textContent = message;
+                this.marketMessageDisplay.classList.remove('hidden');
+                if (type === 'error') {
+                    this.marketMessageDisplay.classList.remove('text-green-600');
+                    this.marketMessageDisplay.classList.add('text-red-600');
+                } else {
+                    this.marketMessageDisplay.classList.remove('text-red-600');
+                    this.marketMessageDisplay.classList.add('text-green-600');
+                }
+                setTimeout(() => {
+                    this.marketMessageDisplay.classList.add('hidden');
+                }, 3000); // 3초 후 메시지 숨김
+            }
+
             updateDogUI() {
                 const dogs = this.game.entities.filter(e => e instanceof Dog);
                 this.dogCommandAllButton.classList.toggle('hidden', dogs.length === 0);
@@ -990,25 +1062,69 @@
             setupMarketModal() {
                 const buySection = document.getElementById('market-buy-section');
                 const sellSection = document.getElementById('market-sell-section');
-                buySection.innerHTML = `<h3 class="font-bold mb-2 text-lg">구매</h3>`;
-                sellSection.innerHTML = `<h3 class="font-bold mb-2 text-lg">판매</h3>`;
+                
+                // 구매 섹션 초기화 및 업데이트
+                buySection.innerHTML = `
+                    <h3 class="font-bold mb-2 text-lg">구매</h3>
+                    <div id="gold-info-buy" class="text-sm mb-2">현재 골드: ${this.game.gameState.gold}</div>
+                `;
+                
+                // 판매 섹션 초기화 및 업데이트
+                sellSection.innerHTML = `
+                    <h3 class="font-bold mb-2 text-lg">판매</h3>
+                    <div id="gold-info-sell" class="text-sm mb-2">현재 골드: ${this.game.gameState.gold}</div>
+                `;
+
                 const createItemHTML = (name, price, current, action) => {
+                    const itemId = `${action}-${name.replace(/ /g, '_')}`;
+                    let maxQty = 0;
+                    if (action === 'buy') {
+                        if (name === '새끼 양') maxQty = Math.floor(this.game.gameState.gold / 5);
+                        else if (name === '어른 양') maxQty = Math.floor(this.game.gameState.gold / 10);
+                        else if (name === '개') {
+                            const currentDogCount = this.game.entities.filter(e => e instanceof Dog).length;
+                            maxQty = Math.min(Math.floor(this.game.gameState.gold / 50), 3 - currentDogCount);
+                        }
+                        else if (name === '건초') maxQty = Math.floor(this.game.gameState.gold / 1);
+                        maxQty = Math.max(0, maxQty); // Ensure not negative
+                    } else { // sell
+                        const isAdult = name === '어른 양';
+                        maxQty = this.game.entities.filter(e => e instanceof Sheep && e.isAdult === isAdult && this.game.isInsidePasture(e)).length;
+                    }
+
+                    const isDisabled = maxQty === 0 ? 'disabled' : '';
+                    // Default slider value: 0 if maxQty is 0, otherwise 1.
+                    const initialSliderValue = maxQty === 0 ? 0 : 1;
+                    
                     return `
                         <div class="bg-gray-100 p-3 rounded-md">
                             <p class="font-semibold">${name} <span class="text-sm font-normal">(${price} 골드)</span></p>
                             <p class="text-sm text-gray-600">보유: ${current}</p>
                             <div class="flex items-center gap-2 mt-2">
-                                <input id="${action}-${name.replace(/ /g, '_')}-qty" type="number" value="1" min="1" class="w-16 text-center border rounded-md">
-                                <button onclick="game.market.${action}('${name.replace(/ /g, '_')}')" class="flex-1 bg-blue-500 text-white p-1 rounded-md text-sm">${action === 'buy' ? '구매' : '판매'}</button>
+                                <span class="text-lg w-8 text-center" id="${itemId}-display">${initialSliderValue}</span>
+                                <input id="${itemId}-qty" type="range" value="${initialSliderValue}" min="0" max="${maxQty}" class="flex-1" oninput="document.getElementById('${itemId}-display').textContent=this.value" ${isDisabled}>
+                                <button onclick="game.market.${action}('${name.replace(/ /g, '_')}')" class="bg-blue-500 text-white p-1 rounded-md text-sm ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}" ${isDisabled}>${action === 'buy' ? '구매' : '판매'}</button>
                             </div>
                         </div>`;
                 };
-                buySection.innerHTML += createItemHTML('새끼 양', 5, this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult).length, 'buy');
-                buySection.innerHTML += createItemHTML('어른 양', 10, this.game.entities.filter(e=>e instanceof Sheep && e.isAdult).length, 'buy');
-                buySection.innerHTML += createItemHTML('개', 50, this.game.entities.filter(e=>e instanceof Dog).length, 'buy');
-                buySection.innerHTML += createItemHTML('건초', 1, this.game.gameState.hayStock, 'buy');
-                sellSection.innerHTML += createItemHTML('새끼 양', 2, this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length, 'sell');
-                sellSection.innerHTML += createItemHTML('어른 양', 5, this.game.entities.filter(e=>e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length, 'sell');
+
+                // 현재 보유한 양, 개, 건초 수 업데이트
+                const youngSheepCount = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult).length;
+                const adultSheepCount = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult).length;
+                const dogCount = this.game.entities.filter(e=>e instanceof Dog).length;
+                const hayStockCount = this.game.gameState.hayStock;
+
+                buySection.innerHTML += createItemHTML('새끼 양', 5, youngSheepCount, 'buy');
+                buySection.innerHTML += createItemHTML('어른 양', 10, adultSheepCount, 'buy');
+                buySection.innerHTML += createItemHTML('개', 50, dogCount, 'buy');
+                buySection.innerHTML += createItemHTML('건초', 1, hayStockCount, 'buy');
+                
+                // 목장 안에 있는 판매 가능한 양만 계산
+                const sellableYoungSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
+                const sellableAdultSheep = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
+
+                sellSection.innerHTML += createItemHTML('새끼 양', 2, sellableYoungSheep, 'sell');
+                sellSection.innerHTML += createItemHTML('어른 양', 5, sellableAdultSheep, 'sell');
             }
             toggleHayModal(show, direction = 'toTrough') {
                 document.getElementById('hay-modal').classList.toggle('hidden', !show);
@@ -1111,12 +1227,19 @@
         class Market {
             constructor(game) { this.game = game; }
             buy(item) {
-                const qty = parseInt(document.getElementById(`buy-${item}-qty`).value);
-                if (isNaN(qty) || qty <= 0) return;
+                const qtyInput = document.getElementById(`buy-${item}-qty`);
+                const qty = parseInt(qtyInput.value);
+                if (isNaN(qty) || qty <= 0) {
+                    this.game.ui.showMessage("구매 수량이 유효하지 않습니다.", 'error');
+                    return;
+                }
                 const costs = { '새끼_양': 5, '어른_양': 10, '개': 50, '건초': 1 };
                 const totalCost = costs[item] * qty;
                 if (this.game.gameState.gold >= totalCost) {
-                    if (item === '개' && this.game.entities.filter(e => e instanceof Dog).length + qty > 3) { alert("개는 최대 3마리까지 보유할 수 있습니다."); return; }
+                    if (item === '개' && this.game.entities.filter(e => e instanceof Dog).length + qty > 3) { 
+                        this.game.ui.showMessage("개는 최대 3마리까지 보유할 수 있습니다.", 'error'); 
+                        return; 
+                    }
                     this.game.gameState.gold -= totalCost;
                     const pos = {x: this.game.shepherd.x, y: this.game.shepherd.y};
                     for(let i=0; i<qty; i++) {
@@ -1125,20 +1248,30 @@
                         if (item === '개') this.game.entities.push(new Dog(this.game, pos.x, pos.y));
                         if (item === '건초') this.game.gameState.hayStock++;
                     }
-                } else { alert("골드가 부족합니다."); }
-                this.game.ui.setupMarketModal();
+                    this.game.ui.showMessage(`${qty} ${item.replace('_', ' ')} 구매 완료!`, 'success');
+                    this.game.ui.setupMarketModal(); // 거래 후 UI 업데이트
+                } else { 
+                    this.game.ui.showMessage("골드가 부족합니다.", 'error'); 
+                }
             }
             sell(item) {
-                const qty = parseInt(document.getElementById(`sell-${item}-qty`).value);
-                if (isNaN(qty) || qty <= 0) return;
+                const qtyInput = document.getElementById(`sell-${item}-qty`);
+                const qty = parseInt(qtyInput.value);
+                if (isNaN(qty) || qty <= 0) {
+                    this.game.ui.showMessage("판매 수량이 유효하지 않습니다.", 'error');
+                    return;
+                }
                 const prices = { '새끼_양': 2, '어른_양': 5 };
                 const isAdult = item === '어른_양';
                 const sheepToSell = this.game.entities.filter(e => e instanceof Sheep && e.isAdult === isAdult && this.game.isInsidePasture(e));
                 if (sheepToSell.length >= qty) {
                     for(let i=0; i<qty; i++) sheepToSell[i].isDead = true;
                     this.game.gameState.gold += prices[item] * qty;
-                } else { alert(`목장 안에 판매할 ${isAdult ? '어른 양' : '새끼 양'}이 부족합니다.`); }
-                this.game.ui.setupMarketModal();
+                    this.game.ui.showMessage(`${qty} ${item.replace('_', ' ')} 판매 완료!`, 'success');
+                    this.game.ui.setupMarketModal(); // 거래 후 UI 업데이트
+                } else { 
+                    this.game.ui.showMessage(`목장 안에 판매할 ${isAdult ? '어른 양' : '새끼 양'}이 부족합니다.`, 'error'); 
+                }
             }
         }
 

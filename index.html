@@ -122,19 +122,21 @@
                 <div id="time-hud" class="hud-item"><span>🕒</span> <span id="time-display">오전 06:00</span></div>
                 <div id="day-hud" class="hud-item"><span>🗓️</span> <span id="day-display">Day 1</span></div>
             </div>
-            <div class="flex flex-col sm:flex-row gap-2 items-end">
+            <div class="flex flex-col sm:flex-row gap-2 items-end flex-wrap justify-end">
                 <div id="gold-hud" class="hud-item"><span>💰</span> <span id="gold-display">10</span></div>
                 <div id="sheep-hud" class="hud-item"><span>🐑</span> <span id="sheep-display">5</span></div>
                 <div id="hay-hud" class="hud-item"><span>🌾</span> <span id="hay-display">0</span></div>
                 <div id="food-hud" class="hud-item"><span>🍖</span> <span id="food-display">5</span></div>
                 <div id="wolf-skin-hud" class="hud-item"><span>🐺</span> <span id="wolf-skin-display">0</span></div>
                 <div id="wool-hud" class="hud-item"><span>🧶</span> <span id="wool-display">0</span></div>
+                <div id="fence-hud" class="hud-item"><span>🧱</span> <span id="fence-display">0</span></div>
             </div>
         </div>
         
         <div id="dog-status-ui" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2"></div>
 
         <div class="absolute bottom-2 right-2 flex flex-col gap-2">
+            <button id="build-fence-button" class="hud-item">🧱 울타리 짓기</button>
             <button id="feed-shepherd-button" class="hidden hud-item">🍖 양치기 밥주기</button>
             <button id="hay-action-button" class="hidden hud-item"></button>
             <button id="gate-button" class="hidden hud-item"> 문 닫기</button>
@@ -153,7 +155,7 @@
 
     <!-- Game Modals -->
     <div id="market-modal" class="modal hidden absolute inset-0 flex items-center justify-center p-4">
-        <div class="modal-content w-full max-w-lg p-6 rounded-lg shadow-xl">
+        <div class="modal-content w-full max-w-lg p-6 rounded-lg shadow-xl overflow-y-auto max-h-full">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold">시장</h2>
                 <button onclick="game.ui.toggleMarketModal(false)" class="text-2xl font-bold">&times;</button>
@@ -265,6 +267,7 @@
             WOLF_SPAWN_TIME: 21 * 60,
             GRASS_TILE_SIZE: 20,
             GRASS_EATING_DELAY: 2000,
+            FENCE_SIZE: 20, // 울타리 크기
         };
 
         // --- 유틸리티 함수 ---
@@ -292,7 +295,8 @@
                     hayStock: 0,
                     food: 5,
                     wolfSkin: 0,
-                    wool: 0, // 양털 추가
+                    wool: 0,
+                    fences: 10, // 보유 울타리 개수
                     isNight: false,
                     gameOver: false,
                     paused: false,
@@ -312,8 +316,11 @@
                         },
                         haystack: { x: 1150, y: 880, radius: 30 }
                     },
-                    grassPatches: []
+                    grassPatches: [],
+                    fences: new Set(), // 설치된 울타리 위치
                 };
+                this.isBuildMode = false;
+                this.mouseGridPos = { x: 0, y: 0 };
 
                 const p = this.world.pasture;
                 const margin = 10 * config.GRASS_TILE_SIZE;
@@ -415,6 +422,7 @@
                 this.ctx.translate(-this.camera.x, -this.camera.y);
                 this.drawBackground();
                 this.entities.sort((a, b) => a.y - b.y).forEach(e => e.draw(this.ctx));
+                this.drawBuildPreview();
                 this.ctx.restore();
             }
             
@@ -491,6 +499,84 @@
                     this.ctx.fillStyle = '#8B4513';
                     this.ctx.fillRect(gate.x, gate.y - 5, gate.width, gate.height);
                 }
+
+                // Draw placed fences
+                this.ctx.fillStyle = '#8B4513';
+                this.ctx.strokeStyle = '#5a2d0c';
+                this.ctx.lineWidth = 2;
+                const fenceSize = config.FENCE_SIZE;
+                for (const fencePosStr of this.world.fences) {
+                    const [gridX, gridY] = fencePosStr.split(',').map(Number);
+                    const x = gridX * fenceSize;
+                    const y = gridY * fenceSize;
+                    this.ctx.fillRect(x, y, fenceSize, fenceSize);
+                    this.ctx.strokeRect(x, y, fenceSize, fenceSize);
+                }
+            }
+
+            drawBuildPreview() {
+                if (!this.isBuildMode) return;
+                const fenceSize = config.FENCE_SIZE;
+                const x = this.mouseGridPos.x * fenceSize;
+                const y = this.mouseGridPos.y * fenceSize;
+                const gridX = this.mouseGridPos.x;
+                const gridY = this.mouseGridPos.y;
+                const fenceKey = `${gridX},${gridY}`;
+
+                let previewColor = 'red'; // Default to red (invalid)
+
+                if (this.world.fences.has(fenceKey)) {
+                    previewColor = 'orange'; // Color for demolition
+                } else if (this.gameState.fences > 0) {
+                    if (this.canPlaceFence(gridX, gridY)) {
+                        previewColor = 'green'; // Color for valid placement
+                    }
+                }
+
+                this.ctx.globalAlpha = 0.5;
+                this.ctx.fillStyle = previewColor;
+                this.ctx.fillRect(x, y, fenceSize, fenceSize);
+                this.ctx.globalAlpha = 1.0;
+            }
+
+            canPlaceFence(gridX, gridY) {
+                const posStr = `${gridX},${gridY}`;
+                if (this.world.fences.has(posStr)) return false;
+
+                const fenceSize = config.FENCE_SIZE;
+                const fenceBox = {
+                    left: gridX * fenceSize,
+                    right: (gridX + 1) * fenceSize,
+                    top: gridY * fenceSize,
+                    bottom: (gridY + 1) * fenceSize
+                };
+
+                const p = this.world.pasture;
+                const trough = p.trough;
+                const haystack = p.haystack;
+
+                // Pasture fence margin
+                if (fenceBox.right > p.x - 5 && fenceBox.left < p.x + p.width + 5 &&
+                    fenceBox.bottom > p.y - 5 && fenceBox.top < p.y + p.height + 5) {
+                    return false;
+                }
+
+                // Trough
+                if (fenceBox.right > trough.x && fenceBox.left < trough.x + trough.width &&
+                    fenceBox.bottom > trough.y && fenceBox.top < trough.y + trough.height) {
+                    return false;
+                }
+
+                // Haystack
+                const distToHaystack = utils.distance(
+                    { x: fenceBox.left + fenceSize / 2, y: fenceBox.top + fenceSize / 2 },
+                    haystack
+                );
+                if (distToHaystack < haystack.radius + fenceSize / 2) {
+                    return false;
+                }
+
+                return true;
             }
 
             updateTime(deltaTime) {
@@ -677,12 +763,11 @@
                     }
                 }
                 
-                // Hunger logic for Shepherd and Dog
                 if (this instanceof Shepherd || this instanceof Dog) {
-                    this.hunger -= 0.01; // Hunger decrease rate
+                    this.hunger -= 0.01;
                     if (this.hunger <= 0) {
                         this.hunger = 0;
-                        this.hp -= 0.02; // HP decrease when starving
+                        this.hp -= 0.02;
                         if (this.hp <= 0 && !this.isDead && !this.deathLogged) {
                             this.game.logMessage(`${this.name}이(가) 굶주림으로 죽었습니다.`);
                             this.deathLogged = true;
@@ -713,7 +798,6 @@
                     ctx.fillStyle = hpColor; ctx.fillRect(this.x - this.radius, barY, this.radius * 2 * (this.hp / this.maxHp), 5);
                 }
 
-                // Draw hunger bar for Shepherd and Dog
                 if ((this instanceof Shepherd || this instanceof Dog) && this.hunger < this.maxHunger) {
                     ctx.fillStyle = '#7a5c58'; ctx.fillRect(this.x - this.radius, this.y + this.radius + 2, this.radius * 2, 4);
                     ctx.fillStyle = '#cdab7d'; ctx.fillRect(this.x - this.radius, this.y + this.radius + 2, this.radius * 2 * (this.hunger / this.maxHunger), 4);
@@ -783,6 +867,45 @@
                         }
                     }
                 }
+
+                // Player-built fence collision
+                const fenceSize = config.FENCE_SIZE;
+                const gridX = Math.floor(this.x / fenceSize);
+                const gridY = Math.floor(this.y / fenceSize);
+
+                for (let i = -1; i <= 1; i++) {
+                    for (let j = -1; j <= 1; j++) {
+                        const key = `${gridX + i},${gridY + j}`;
+                        if (this.game.world.fences.has(key)) {
+                            const fenceX = (gridX + i) * fenceSize;
+                            const fenceY = (gridY + j) * fenceSize;
+
+                            const closestX = Math.max(fenceX, Math.min(this.x, fenceX + fenceSize));
+                            const closestY = Math.max(fenceY, Math.min(this.y, fenceY + fenceSize));
+                            const distance = utils.distance({x: this.x, y: this.y}, {x: closestX, y: closestY});
+
+                            if (distance < this.radius) {
+                                const overlap = this.radius - distance;
+                                const angle = Math.atan2(this.y - closestY, this.x - closestX);
+                                
+                                if (distance > 0) {
+                                    this.x += Math.cos(angle) * overlap;
+                                    this.y += Math.sin(angle) * overlap;
+                                } else {
+                                    const dx = this.x - (fenceX + fenceSize / 2);
+                                    const dy = this.y - (fenceY + fenceSize / 2);
+                                    const overlapX = (this.radius + fenceSize / 2) - Math.abs(dx);
+                                    const overlapY = (this.radius + fenceSize / 2) - Math.abs(dy);
+                                    if (overlapX < overlapY) {
+                                        this.x += dx > 0 ? overlapX : -overlapX;
+                                    } else {
+                                        this.y += dy > 0 ? overlapY : -overlapY;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             moveTowards(target, speed) {
                 const angle = Math.atan2(target.y - this.y, target.x - this.x);
@@ -818,8 +941,8 @@
                 this.isAdult = isAdult;
                 this.age = isAdult ? 7 : 0;
                 this.breedingCooldown = 0;
-                this.shearCooldown = 0; // 털깎기 쿨타임
-                this.isSheared = false; // 털 깎인 상태
+                this.shearCooldown = 0;
+                this.isSheared = false;
                 this.state = 'wandering';
                 this.stateTimer = 0;
                 this.maxHp = 50;
@@ -1087,12 +1210,12 @@
             draw(ctx) {
                 const originalColor = this.color;
                 if (this.isSheared) {
-                    this.color = '#cccccc'; // 털 깎인 색
+                    this.color = '#cccccc';
                 }
                 
-                super.draw(ctx); // Character.draw() 호출
+                super.draw(ctx);
                 
-                this.color = originalColor; // 색상 복원
+                this.color = originalColor;
                 
                 if (this.isLeader) {
                     ctx.fillStyle = 'gold';
@@ -1121,7 +1244,7 @@
                 if (this.shearCooldown > 0) {
                     this.shearCooldown--;
                     if (this.shearCooldown === 0) {
-                        this.isSheared = false; // 털 다시 자람
+                        this.isSheared = false;
                     }
                 }
             }
@@ -1232,6 +1355,7 @@
                     this.game.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
                 }
                 this.game.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
+                this.game.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
             }
             update() {
                 this.moveX = 0;
@@ -1275,11 +1399,51 @@
                 this.joystick.active = false; this.moveX = 0; this.moveY = 0;
                 document.getElementById('joystick-handle').style.transform = `translate(0px, 0px)`;
             }
-            handleCanvasClick(e) {
-                if (this.game.gameState.paused) return;
+            handleMouseMove(e) {
+                if (!this.game.isBuildMode) return;
                 const rect = this.game.canvas.getBoundingClientRect();
                 const worldX = e.clientX - rect.left + this.game.camera.x;
                 const worldY = e.clientY - rect.top + this.game.camera.y;
+
+                const gridX = Math.floor(worldX / config.FENCE_SIZE);
+                const gridY = Math.floor(worldY / config.FENCE_SIZE);
+
+                this.game.mouseGridPos = { x: gridX, y: gridY };
+            }
+            handleCanvasClick(e) {
+                const rect = this.game.canvas.getBoundingClientRect();
+                const worldX = e.clientX - rect.left + this.game.camera.x;
+                const worldY = e.clientY - rect.top + this.game.camera.y;
+
+                if (this.game.isBuildMode) {
+                    const gridX = Math.floor(worldX / config.FENCE_SIZE);
+                    const gridY = Math.floor(worldY / config.FENCE_SIZE);
+                    const fenceKey = `${gridX},${gridY}`;
+
+                    if (this.game.world.fences.has(fenceKey)) {
+                        this.game.world.fences.delete(fenceKey);
+                        this.game.gameState.fences++;
+                        this.game.logMessage("울타리를 철거하여 회수했습니다.");
+                    } else {
+                        if (this.game.gameState.fences > 0) {
+                            if (this.game.canPlaceFence(gridX, gridY)) {
+                                this.game.world.fences.add(fenceKey);
+                                this.game.gameState.fences--;
+                                if (this.game.gameState.fences <= 0) {
+                                    this.game.isBuildMode = false;
+                                    this.game.logMessage("울타리를 모두 소진하여 건설 모드를 종료합니다.");
+                                }
+                            } else {
+                                this.game.logMessage("이곳에는 울타리를 설치할 수 없습니다.");
+                            }
+                        } else {
+                             this.game.logMessage("보유한 울타리가 없습니다.");
+                        }
+                    }
+                    return;
+                }
+
+                if (this.game.gameState.paused) return;
 
                 for (const entity of this.game.entities) {
                     if (entity instanceof Sheep && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {
@@ -1305,13 +1469,15 @@
                 this.hayDisplay = document.getElementById('hay-display'); 
                 this.foodDisplay = document.getElementById('food-display');
                 this.wolfSkinDisplay = document.getElementById('wolf-skin-display');
-                this.woolDisplay = document.getElementById('wool-display'); // 양털 HUD
+                this.woolDisplay = document.getElementById('wool-display');
+                this.fenceDisplay = document.getElementById('fence-display');
                 this.gateButton = document.getElementById('gate-button');
                 this.marketButton = document.getElementById('market-button'); 
                 this.hayActionButton = document.getElementById('hay-action-button');
                 this.dogCommandAllButton = document.getElementById('dog-command-all-button'); 
                 this.dogStatusUI = document.getElementById('dog-status-ui');
                 this.feedShepherdButton = document.getElementById('feed-shepherd-button');
+                this.buildFenceButton = document.getElementById('build-fence-button');
 
                 this.confirmModal = document.getElementById('confirm-modal');
                 this.confirmMessage = document.getElementById('confirm-message');
@@ -1353,6 +1519,20 @@
                         }
                     }
                 });
+
+                this.buildFenceButton.addEventListener('click', () => {
+                    this.game.isBuildMode = !this.game.isBuildMode;
+                    if (this.game.isBuildMode) {
+                        if (this.game.gameState.fences > 0) {
+                            this.game.logMessage("울타리 건설/철거 모드를 시작합니다.");
+                        } else {
+                            this.game.logMessage("보유한 울타리가 없습니다. 철거는 가능합니다.");
+                        }
+                    } else {
+                        this.game.logMessage("울타리 건설/철거 모드를 종료합니다.");
+                    }
+                });
+
                 this.marketButton.addEventListener('click', () => this.toggleMarketModal(true));
                 this.hayActionButton.addEventListener('click', () => {
                     const distToHaystack = utils.distance(this.game.shepherd, this.game.world.pasture.haystack);
@@ -1396,7 +1576,8 @@
                 this.hayDisplay.textContent = this.game.gameState.hayStock;
                 this.foodDisplay.textContent = this.game.gameState.food;
                 this.wolfSkinDisplay.textContent = this.game.gameState.wolfSkin;
-                this.woolDisplay.textContent = this.game.gameState.wool; // 양털 HUD 업데이트
+                this.woolDisplay.textContent = this.game.gameState.wool;
+                this.fenceDisplay.textContent = this.game.gameState.fences;
 
                 const distToGate = utils.distance(this.game.shepherd, {x: this.game.world.pasture.gate.x + 40, y: this.game.world.pasture.gate.y + 10});
                 this.gateButton.classList.toggle('hidden', !(distToGate < 100));
@@ -1484,6 +1665,7 @@
                         }
                         else if (name === '건초') maxQty = Math.floor(this.game.gameState.gold / 1);
                         else if (name === '식량') maxQty = Math.floor(this.game.gameState.gold / 1);
+                        else if (name === '울타리') maxQty = Math.floor(this.game.gameState.gold / 1);
                         maxQty = Math.max(0, maxQty);
                     } else {
                         if (name === '새끼 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
@@ -1514,12 +1696,14 @@
                 const foodCount = this.game.gameState.food;
                 const wolfSkinCount = this.game.gameState.wolfSkin;
                 const woolCount = this.game.gameState.wool;
+                const fenceCount = this.game.gameState.fences;
 
                 buySection.innerHTML += createItemHTML('새끼 양', 5, youngSheepCount, 'buy');
                 buySection.innerHTML += createItemHTML('어른 양', 10, adultSheepCount, 'buy');
                 buySection.innerHTML += createItemHTML('개', 50, dogCount, 'buy');
                 buySection.innerHTML += createItemHTML('건초', 1, hayStockCount, 'buy');
                 buySection.innerHTML += createItemHTML('식량', 1, foodCount, 'buy');
+                buySection.innerHTML += createItemHTML('울타리', 1, fenceCount, 'buy');
                 
                 const sellableYoungSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
                 const sellableAdultSheep = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
@@ -1666,7 +1850,7 @@
                     
                     feedButton.onclick = () => {
                         dog.feed();
-                        hungerInfo.textContent = `${Math.ceil(dog.hunger)} / ${dog.maxHunger}`; // Update immediately
+                        hungerInfo.textContent = `${Math.ceil(dog.hunger)} / ${dog.maxHunger}`;
                         if (this.game.gameState.food <= 0) {
                             feedButton.disabled = true;
                         }
@@ -1714,7 +1898,7 @@
                     this.game.ui.showMessage("구매 수량이 유효하지 않습니다.", 'error');
                     return;
                 }
-                const costs = { '새끼_양': 5, '어른_양': 10, '개': 50, '건초': 1, '식량': 1 };
+                const costs = { '새끼_양': 5, '어른_양': 10, '개': 50, '건초': 1, '식량': 1, '울타리': 1 };
                 const totalCost = costs[item] * qty;
                 if (this.game.gameState.gold >= totalCost) {
                     if (item === '개' && this.game.entities.filter(e => e instanceof Dog).length + qty > 3) { 
@@ -1729,6 +1913,7 @@
                         else if (item === '개') this.game.entities.push(new Dog(this.game, pos.x, pos.y));
                         else if (item === '건초') this.game.gameState.hayStock++;
                         else if (item === '식량') this.game.gameState.food++;
+                        else if (item === '울타리') this.game.gameState.fences++;
                     }
                     this.game.ui.showMessage(`${qty} ${item.replace('_', ' ')} 구매 완료!`, 'success');
                     this.game.logMessage(`${qty} ${item.replace('_', ' ')}을(를) 구매했습니다. (남은 골드: ${this.game.gameState.gold})`);

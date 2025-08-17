@@ -267,12 +267,29 @@
                     grassPatches: []
                 };
 
+                // [수정] 울타리 밖 10칸을 제외한 모든 공간을 풀로 채우도록 변경
+                const p = this.world.pasture;
+                const margin = 10 * config.GRASS_TILE_SIZE; // 10칸 = 200 픽셀
+
+                const noGrassZone = {
+                    x: p.x - margin,
+                    y: p.y - margin,
+                    width: p.width + margin * 2,
+                    height: p.height + margin * 2
+                };
+
+                // noGrassZone을 제외한 4개의 사각형 영역에 풀 생성
                 this.initializeGrassPatches([
-                    { x: 100, y: 100, width: 300, height: 200 },
-                    { x: 1500, y: 200, width: 400, height: 250 },
-                    { x: 200, y: 1100, width: 250, height: 250 },
-                    { x: 1600, y: 1200, width: 300, height: 200 },
+                    // Top patch
+                    { x: 0, y: 0, width: this.world.width, height: noGrassZone.y },
+                    // Bottom patch
+                    { x: 0, y: noGrassZone.y + noGrassZone.height, width: this.world.width, height: this.world.height - (noGrassZone.y + noGrassZone.height) },
+                    // Left patch
+                    { x: 0, y: noGrassZone.y, width: noGrassZone.x, height: noGrassZone.height },
+                    // Right patch
+                    { x: noGrassZone.x + noGrassZone.width, y: noGrassZone.y, width: this.world.width - (noGrassZone.x + noGrassZone.width), height: noGrassZone.height }
                 ]);
+
 
                 // Initialize trough tiles
                 this.initializeTroughTiles();
@@ -295,13 +312,17 @@
 
             initializeGrassPatches(patches) {
                 patches.forEach(p => {
+                    // Ensure width and height are non-negative
+                    if (p.width <= 0 || p.height <= 0) return;
+                    
                     const patch = { ...p, tiles: [] };
                     const cols = Math.floor(p.width / config.GRASS_TILE_SIZE);
                     const rows = Math.floor(p.height / config.GRASS_TILE_SIZE);
                     for (let r = 0; r < rows; r++) {
                         patch.tiles[r] = [];
                         for (let c = 0; c < cols; c++) {
-                            patch.tiles[r][c] = { richness: 1, maxRichness: 3 };
+                            // [수정] 풀 타일에 재생성 타이머 추가
+                            patch.tiles[r][c] = { richness: 1, maxRichness: 3, regrowthTimer: 0 };
                         }
                     }
                     this.world.grassPatches.push(patch);
@@ -487,15 +508,32 @@
                 this.entities = this.entities.filter(e => !(e instanceof Wolf)); // 늑대 제거
                 this.world.pasture.gate.isOpen = true; // 아침에는 문 항상 열림
                 this.logMessage(`새로운 날이 밝았습니다. Day ${this.gameState.day}`);
-                if (this.gameState.day % 2 === 0) { // 이틀에 한 번 풀 성장
+
+                // [수정] 풀 재생성 및 성장 로직
+                // 1. 재생성 로직 (매일 실행)
+                this.world.grassPatches.forEach(p => {
+                    p.tiles.forEach(row => row.forEach(tile => {
+                        // 5턴 후에 0에서 1로 재생성
+                        if (tile.richness === 0 && tile.regrowthTimer > 0) {
+                            tile.regrowthTimer--;
+                            if (tile.regrowthTimer === 0) {
+                                tile.richness = 1;
+                            }
+                        }
+                    }));
+                });
+
+                // 2. 성장 로직 (2턴마다 실행)
+                if (this.gameState.day % 2 === 0) {
                     this.world.grassPatches.forEach(p => {
                         p.tiles.forEach(row => row.forEach(tile => {
-                            if (tile.richness < tile.maxRichness) {
+                            if (tile.richness > 0 && tile.richness < tile.maxRichness) {
                                 tile.richness++;
                             }
                         }));
                     });
                 }
+                
                 this.handleBreedingAndGrowth();
             }
 
@@ -858,6 +896,10 @@
                                 this.hunger = Math.min(100, this.hunger + 10);
                                 currentFoodSource.tileObject.richness--;
                                 this.game.logMessage(`${this.name}이(가) 풀을 먹어 배부름이 10 올랐습니다.`);
+                                // [수정] 풀을 다 먹으면 재생성 타이머 시작
+                                if (currentFoodSource.tileObject.richness <= 0) {
+                                    currentFoodSource.tileObject.regrowthTimer = 5; // 5턴 후 재생성 시작
+                                }
                             } else if (currentFoodSource.type === 'hay') {
                                 this.hunger = Math.min(100, this.hunger + 30);
                                 currentFoodSource.tileObject.richness--;
@@ -910,7 +952,6 @@
                     case 'wandering':
                         if (this.stateTimer <= 0 || !this.target || utils.distance(this, this.target) < 10) {
                             this.target = { x: this.x + (Math.random() - 0.5) * 200, y: this.y + (Math.random() - 0.5) * 200 };
-                            // [수정] stateTimer 값을 늘려 배회 시 방향 전환 빈도를 줄입니다. (100~300 -> 200~500)
                             this.stateTimer = Math.random() * 300 + 200;
                         }
                         if (this.target) {
@@ -937,7 +978,6 @@
                 }
 
                 if (isMoving) {
-                    // [수정] steeringFactor 값을 낮춰 움직임을 더 부드럽게 만듭니다. (0.1 -> 0.05)
                     const steeringFactor = 0.05;
                     this.vx = this.vx * (1 - steeringFactor) + desiredVx * steeringFactor;
                     this.vy = this.vy * (1 - steeringFactor) + desiredVy * steeringFactor;
@@ -1394,7 +1434,7 @@
                 const canAddToTrough = inPasture && distToHaystack < 80;
                 const canTakeFromTrough = inPasture && distToTrough < 80;
                 this.hayActionButton.classList.toggle('hidden', !(canAddToTrough || canTakeFromTrough));
-                if (canAddToTrough) { this.hayActionButton.innerHTML = '🌾 건초 넣기'; }
+                if (canAddToTrough) { this.hayActionButton.innerHTML = '� 건초 넣기'; }
                 else if (canTakeFromTrough) { this.hayActionButton.innerHTML = '↩️ 건초 되돌리기'; }
                 this.updateDogUI();
             }
@@ -1745,3 +1785,4 @@
     </script>
 </body>
 </html>
+�

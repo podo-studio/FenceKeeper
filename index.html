@@ -799,7 +799,6 @@
                 }
 
                 // --- 주변 환경 감지 ---
-                // [수정] 양치기와 개도 위험 요소로 간주하도록 변경
                 const dangers = this.game.entities.filter(e => 
                     (e instanceof Wolf && utils.distance(this, e) < 200) ||
                     ((e instanceof Shepherd || e instanceof Dog) && utils.distance(this, e) < 100)
@@ -911,7 +910,8 @@
                     case 'wandering':
                         if (this.stateTimer <= 0 || !this.target || utils.distance(this, this.target) < 10) {
                             this.target = { x: this.x + (Math.random() - 0.5) * 200, y: this.y + (Math.random() - 0.5) * 200 };
-                            this.stateTimer = Math.random() * 200 + 100;
+                            // [수정] stateTimer 값을 늘려 배회 시 방향 전환 빈도를 줄입니다. (100~300 -> 200~500)
+                            this.stateTimer = Math.random() * 300 + 200;
                         }
                         if (this.target) {
                             const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
@@ -937,7 +937,8 @@
                 }
 
                 if (isMoving) {
-                    const steeringFactor = 0.1;
+                    // [수정] steeringFactor 값을 낮춰 움직임을 더 부드럽게 만듭니다. (0.1 -> 0.05)
+                    const steeringFactor = 0.05;
                     this.vx = this.vx * (1 - steeringFactor) + desiredVx * steeringFactor;
                     this.vy = this.vy * (1 - steeringFactor) + desiredVy * steeringFactor;
                 } else {

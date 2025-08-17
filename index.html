@@ -532,19 +532,29 @@
             transferHay(direction, quantity) {
                 const trough = this.world.pasture.trough;
                 if (direction === 'toTrough') {
-                    let amountToTransfer = quantity;
-                    for (let i = 0; i < trough.troughTiles.length && amountToTransfer > 0; i++) {
-                        const tile = trough.troughTiles[i];
-                        const spaceInTile = tile.maxRichness - tile.richness;
-                        const transferToTile = Math.min(amountToTransfer, this.gameState.hayStock, spaceInTile);
-                        if (transferToTile > 0) {
-                            tile.richness += transferToTile;
-                            this.gameState.hayStock -= transferToTile;
-                            amountToTransfer -= transferToTile;
+                    const tiles = trough.troughTiles;
+                    const before = this.calculateTroughHayAmount();
+                    let remaining = Math.min(
+                        quantity,
+                        this.gameState.hayStock
+                    );
+                    // 라운드로빈 1개씩 분배
+                    while (remaining > 0) {
+                        let movedThisRound = 0;
+                        for (let i = 0; i < tiles.length && remaining > 0; i++) {
+                            const tile = tiles[i];
+                            if (tile.richness < tile.maxRichness) {
+                                tile.richness += 1;
+                                this.gameState.hayStock -= 1;
+                                remaining -= 1;
+                                movedThisRound++;
+                            }
                         }
+                        if (movedThisRound === 0) break; // 모두 가득 참
                     }
-                    this.world.pasture.trough.hayAmount = this.calculateTroughHayAmount(); // Update total
-                    this.logMessage(`건초 ${quantity - amountToTransfer}개를 먹이통에 넣었습니다. (남은 건초: ${this.gameState.hayStock})`);
+                    trough.hayAmount = this.calculateTroughHayAmount();
+                    const transferred = trough.hayAmount - before;
+                    this.logMessage(`건초 ${transferred}개를 먹이통에 넣었습니다. (남은 건초: ${this.gameState.hayStock})`);
                 } else if (direction === 'fromTrough') {
                     let amountToTransfer = quantity;
                     for (let i = 0; i < trough.troughTiles.length && amountToTransfer > 0; i++) {
@@ -967,7 +977,7 @@
                     if (this.state === 'fleeing') currentSpeed *= 1.2; // 도망 시 속도 증가
                     else if (this.state === 'wandering') currentSpeed *= 0.5; // 배회 시 속도 감소
                     desiredVx = (finalDx / magnitude) * currentSpeed;
-                    desiredVy = (finalDy / magnitude) * currentSpeed;
+                    desiredVy = (finalDy / magnitude) * currentSpeed; // Corrected: Use finalDy
                 }
 
                 // 양이 먹는 중이 아닐 때만 움직임 적용

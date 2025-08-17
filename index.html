@@ -276,6 +276,8 @@
                 window.addEventListener('resize', () => this.resizeCanvas());
 
                 this.logDisplay = document.getElementById('game-log'); // Get the log element
+                this._lastStartedDay = 0; // Prevent startOfDay from being called multiple times per day
+                this._lastEndedDay = 0; // Prevent endOfDay from being called multiple times per day
             }
 
             initializeGrassPatches(patches) {
@@ -409,6 +411,12 @@
             
             // 하루 시작 시 처리
             startOfDay() {
+                // Prevent multiple calls within the same game day
+                if (this._lastStartedDay === this.gameState.day) {
+                    return;
+                }
+                this._lastStartedDay = this.gameState.day;
+
                 this.entities = this.entities.filter(e => !(e instanceof Wolf)); // 늑대 제거
                 this.world.pasture.gate.isOpen = true; // 아침에는 문 항상 열림
                 this.logMessage(`새로운 날이 밝았습니다. Day ${this.gameState.day}`);
@@ -426,6 +434,12 @@
 
             // 하루 종료 시 처리
             endOfDay() {
+                // Prevent multiple calls within the same game day
+                if (this._lastEndedDay === this.gameState.day) {
+                    return;
+                }
+                this._lastEndedDay = this.gameState.day;
+
                 this.entities.forEach(e => { if (e.endOfDay) e.endOfDay(); });
             }
 
@@ -737,12 +751,16 @@
                         let fleeDy = Math.sin(fleeAngle);
 
                         let flockDx = 0, flockDy = 0;
+                        // Declare flockAvgX and flockAvgY outside the if block to ensure they are always defined
+                        let flockAvgX_cohesion = 0; // Renamed to avoid conflict
+                        let flockAvgY_cohesion = 0; // Renamed to avoid conflict
+
                         const flockmates = this.game.entities.filter(e => e instanceof Sheep && e !== this && utils.distance(this, e) < 150);
                         if (flockmates.length > 0) {
-                            let flockAvgX = 0, flockAvgY = 0;
-                            flockmates.forEach(fm => { flockAvgX += fm.x; flockAvgY += fm.y; });
-                            flockAvgX /= flockmates.length; flockAvgY /= flockmates.length; 
-                            const angleToCenter = Math.atan2(flockAvgY - this.y, flockAvgX - this.x);
+                            flockmates.forEach(fm => { flockAvgX_cohesion += fm.x; flockAvgY_cohesion += fm.y; });
+                            flockAvgX_cohesion /= flockmates.length; 
+                            flockAvgY_cohesion /= flockmates.length;
+                            const angleToCenter = Math.atan2(flockAvgY_cohesion - this.y, flockAvgX_cohesion - this.x); // Use renamed variables
                             flockDx = Math.cos(angleToCenter);
                             flockDy = Math.sin(angleToCenter);
                         }
@@ -847,7 +865,7 @@
                 if (this.isLeader) {
                     ctx.fillStyle = 'gold';
                     ctx.font = '16px sans-serif';
-                    ctx.fillText('�', this.x, this.y - this.radius - (this.name ? 25 : 15) - (this.hp < this.maxHp ? 12 : 0));
+                    ctx.fillText('👑', this.x, this.y - this.radius - (this.name ? 25 : 15) - (this.hp < this.maxHp ? 12 : 0));
                 }
                 if (this.hunger < 100) {
                     ctx.fillStyle = '#7a5c58'; ctx.fillRect(this.x - this.radius, this.y + this.radius + 2, this.radius * 2, 4);
@@ -1109,17 +1127,21 @@
                                 this.game.world.pasture.gate.isOpen = false; 
                                 this.game.logMessage('울타리 문을 닫고 밤을 넘겼습니다.');
                                 
-                                // 현재 시간이 이미 자정을 넘겼는지 확인
-                                const currentHour = Math.floor(this.game.gameState.time / 60);
-                                if (currentHour < 6) { // 이미 자정을 넘겨서 다음 날로 넘어간 상태 (예: 오전 1시, 2시...)
-                                    // 날짜는 이미 updateTime에서 증가되었을 것이므로 시간만 오전 6시로 설정
-                                    this.game.gameState.time = 6 * 60; 
-                                } else { // 아직 자정을 넘기지 않은 상태 (예: 오후 9시, 10시...)
-                                    // 다음 날로 넘어가고 시간을 오전 6시로 설정
-                                    this.game.gameState.day++;
-                                    this.game.gameState.time = 6 * 60; 
+                                // Ensure end-of-day processes for the current day are completed exactly once
+                                this.game.endOfDay(); // This will age sheep for the day just passed
+
+                                // Manually advance day and set time to next morning
+                                // Only increment day if we are skipping from the current day's evening/night (before natural midnight rollover)
+                                const currentHourAtSkip = Math.floor(this.game.gameState.time / 60);
+                                if (currentHourAtSkip >= 18) { // If skipping from 18:00 (6 PM) onwards
+                                    this.game.gameState.day++; // Advance to next day
                                 }
-                                this.game.startOfDay(); // 수동으로 startOfDay 호출
+                                this.game.gameState.time = 6 * 60; // Set time to 6 AM of the new day (or current day if already past midnight)
+
+                                // Explicitly call startOfDay for the new day.
+                                // The _lastStartedDay flag will ensure it only runs once for this day.
+                                this.game.startOfDay();
+
                                 this.toggleConfirmModal(false);
                             }, () => {
                                 // 아니오 (시간 안 넘기기)
@@ -1192,7 +1214,7 @@
                 const canAddToTrough = inPasture && distToHaystack < 80;
                 const canTakeFromTrough = inPasture && distToTrough < 80;
                 this.hayActionButton.classList.toggle('hidden', !(canAddToTrough || canTakeFromTrough));
-                if (canAddToTrough) { this.hayActionButton.innerHTML = '🌾 건초 넣기'; }
+                if (canAddToTrough) { this.hayActionButton.innerHTML = '� 건초 넣기'; }
                 else if (canTakeFromTrough) { this.hayActionButton.innerHTML = '↩️ 건초 되돌리기'; }
                 this.updateDogUI();
             }
@@ -1213,21 +1235,47 @@
             }
 
             updateDogUI() {
-                const dogs = this.game.entities.filter(e => e instanceof Dog);
+                // Sort dogs by ID to ensure consistent display order in fixed slots
+                const dogs = this.game.entities.filter(e => e instanceof Dog).sort((a, b) => a.id - b.id);
+                
+                // Update visibility of the "command all" button
                 this.dogCommandAllButton.classList.toggle('hidden', dogs.length === 0);
-                // 개 상태가 변경되었을 때만 UI 업데이트
-                const _snapshot = dogs.map(d => `${d.id}:${d.command}:${d.name}`).join('|');
-                if (this._dogStatusSnapshot !== _snapshot) {
-                    this._dogStatusSnapshot = _snapshot;
-                    this.dogStatusUI.innerHTML = '';
-                    for (const dog of dogs) {
-                        const dogDiv = document.createElement('div');
-                        dogDiv.className = 'hud-item cursor-pointer dog-status-item';
+                
+                // Create a snapshot string for change detection, including the count of active dogs
+                const currentDogInfo = dogs.map(d => `${d.id}:${d.command}:${d.name}`).join('|');
+                const newSnapshot = `${dogs.length}|${currentDogInfo}`;
+
+                // Only re-render if the state of dogs has actually changed
+                if (this._dogStatusSnapshot === newSnapshot) {
+                    return;
+                }
+                this._dogStatusSnapshot = newSnapshot; // Update snapshot
+
+                this.dogStatusUI.innerHTML = ''; // Clear existing buttons
+
+                // Render up to 3 fixed slots for dog buttons
+                for (let i = 0; i < 3; i++) {
+                    const dogDiv = document.createElement('div');
+                    // Apply fixed width and centering classes to prevent layout shifts
+                    dogDiv.className = 'hud-item dog-status-item w-32 flex-none flex flex-col items-center justify-center'; 
+                    
+                    const dog = dogs[i]; // Get the dog for this slot, if it exists
+
+                    if (dog) {
                         dogDiv.dataset.dogId = String(dog.id);
                         const label = (dog.command === 'follow') ? '따라와' : '기다려';
-                        dogDiv.innerHTML = `<span>🐶 ${dog.name}</span> <span class="text-xs">${label}</span>`;
-                        this.dogStatusUI.appendChild(dogDiv);
+                        // Ensured text is block and centered for two lines
+                        dogDiv.innerHTML = `<span class="block text-center">🐶 ${dog.name}</span> <span class="block text-xs text-center">${label}</span>`;
+                        dogDiv.classList.add('cursor-pointer'); // Make it clickable
+                        // Event listener is handled by delegation on the parent dogStatusUI, no need to attach here
+                    } else {
+                        // Empty slot: "입양 필요"
+                        dogDiv.classList.remove('cursor-pointer'); // Not clickable
+                        dogDiv.style.opacity = '0.7'; // Slightly dimmed for empty slots
+                        // Ensured text is block and centered for two lines
+                        dogDiv.innerHTML = `<span class="block text-center">🐕</span> <span class="block text-xs text-center">입양 필요</span>`;
                     }
+                    this.dogStatusUI.appendChild(dogDiv);
                 }
             }
             toggleMarketModal(show) {

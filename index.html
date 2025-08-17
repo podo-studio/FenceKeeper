@@ -128,6 +128,7 @@
                 <div id="hay-hud" class="hud-item"><span>🌾</span> <span id="hay-display">0</span></div>
                 <div id="food-hud" class="hud-item"><span>🍖</span> <span id="food-display">5</span></div>
                 <div id="wolf-skin-hud" class="hud-item"><span>🐺</span> <span id="wolf-skin-display">0</span></div>
+                <div id="wool-hud" class="hud-item"><span>🧶</span> <span id="wool-display">0</span></div>
             </div>
         </div>
         
@@ -204,8 +205,8 @@
                     <p id="sheep-status-info" class="mt-1 p-2 bg-gray-100 rounded-md"></p>
                 </div>
                 <button id="sheep-info-confirm" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">확인</button>
-                <!-- 도축 버튼 추가 -->
-                <button id="sheep-slaughter-button" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600">도축</button>
+                <button id="sheep-shear-button" class="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600">털 깎기</button>
+                <button id="sheep-slaughter-button" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 mt-2">도축</button>
             </div>
         </div>
     </div>
@@ -286,8 +287,9 @@
                     day: 1,
                     gold: 10,
                     hayStock: 0,
-                    food: 5, // 식량 추가
+                    food: 5,
                     wolfSkin: 0,
+                    wool: 0, // 양털 추가
                     isNight: false,
                     gameOver: false,
                     paused: false,
@@ -813,6 +815,8 @@
                 this.isAdult = isAdult;
                 this.age = isAdult ? 7 : 0;
                 this.breedingCooldown = 0;
+                this.shearCooldown = 0; // 털깎기 쿨타임
+                this.isSheared = false; // 털 깎인 상태
                 this.state = 'wandering';
                 this.stateTimer = 0;
                 this.maxHp = 50;
@@ -1078,7 +1082,15 @@
             }
             
             draw(ctx) {
-                super.draw(ctx);
+                const originalColor = this.color;
+                if (this.isSheared) {
+                    this.color = '#cccccc'; // 털 깎인 색
+                }
+                
+                super.draw(ctx); // Character.draw() 호출
+                
+                this.color = originalColor; // 색상 복원
+                
                 if (this.isLeader) {
                     ctx.fillStyle = 'gold';
                     ctx.font = '16px sans-serif';
@@ -1103,6 +1115,12 @@
                 this.age++;
                 if (!this.isAdult && this.age >= 7) { this.isAdult = true; this.radius = 12; }
                 if (this.breedingCooldown > 0) this.breedingCooldown--;
+                if (this.shearCooldown > 0) {
+                    this.shearCooldown--;
+                    if (this.shearCooldown === 0) {
+                        this.isSheared = false; // 털 다시 자람
+                    }
+                }
             }
         }
 
@@ -1284,6 +1302,7 @@
                 this.hayDisplay = document.getElementById('hay-display'); 
                 this.foodDisplay = document.getElementById('food-display');
                 this.wolfSkinDisplay = document.getElementById('wolf-skin-display');
+                this.woolDisplay = document.getElementById('wool-display'); // 양털 HUD
                 this.gateButton = document.getElementById('gate-button');
                 this.marketButton = document.getElementById('market-button'); 
                 this.hayActionButton = document.getElementById('hay-action-button');
@@ -1346,13 +1365,19 @@
                         this.game.logMessage(`모든 개에게 '${newCommand === 'follow' ? '따라와' : '기다려'}' 명령을 내렸습니다.`);
                     }
                 });
+                
+                // 수정된 부분: 개별 개 명령 로직
                 this.dogStatusUI.addEventListener('click', (e) => {
                     const dogDiv = e.target.closest('.dog-status-item');
                     if (!dogDiv) return;
                     const dogId = Number(dogDiv.dataset.dogId);
                     const dog = this.game.entities.find(d => d instanceof Dog && d.id === dogId);
-                    if (!dog) return;
-                    this.toggleDogInfoModal(true, dog);
+                    if (!dog) return; // 빈 슬롯 클릭 시 아무것도 안 함
+
+                    // 개별 개의 명령을 순환시킴
+                    dog.command = dog.command === 'follow' ? 'stay' : 'follow';
+                    const commandText = dog.command === 'follow' ? '따라와' : '기다려';
+                    this.game.logMessage(`${dog.name}에게 '${commandText}' 명령을 내렸습니다.`);
                 });
 
                 this.marketMessageDisplay = document.getElementById('market-message');
@@ -1370,6 +1395,7 @@
                 this.hayDisplay.textContent = this.game.gameState.hayStock;
                 this.foodDisplay.textContent = this.game.gameState.food;
                 this.wolfSkinDisplay.textContent = this.game.gameState.wolfSkin;
+                this.woolDisplay.textContent = this.game.gameState.wool; // 양털 HUD 업데이트
 
                 const distToGate = utils.distance(this.game.shepherd, {x: this.game.world.pasture.gate.x + 40, y: this.game.world.pasture.gate.y + 10});
                 this.gateButton.classList.toggle('hidden', !(distToGate < 100));
@@ -1462,6 +1488,7 @@
                         if (name === '새끼 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
                         else if (name === '어른 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
                         else if (name === '늑대 가죽') maxQty = this.game.gameState.wolfSkin;
+                        else if (name === '양털') maxQty = this.game.gameState.wool;
                     }
 
                     const isDisabled = maxQty === 0 ? 'disabled' : '';
@@ -1485,6 +1512,7 @@
                 const hayStockCount = this.game.gameState.hayStock;
                 const foodCount = this.game.gameState.food;
                 const wolfSkinCount = this.game.gameState.wolfSkin;
+                const woolCount = this.game.gameState.wool;
 
                 buySection.innerHTML += createItemHTML('새끼 양', 5, youngSheepCount, 'buy');
                 buySection.innerHTML += createItemHTML('어른 양', 10, adultSheepCount, 'buy');
@@ -1498,6 +1526,7 @@
                 sellSection.innerHTML += createItemHTML('새끼 양', 2, sellableYoungSheep, 'sell');
                 sellSection.innerHTML += createItemHTML('어른 양', 5, sellableAdultSheep, 'sell');
                 sellSection.innerHTML += createItemHTML('늑대 가죽', 1, wolfSkinCount, 'sell');
+                sellSection.innerHTML += createItemHTML('양털', 1, woolCount, 'sell');
             }
             toggleHayModal(show, direction = 'toTrough') {
                 document.getElementById('hay-modal').classList.toggle('hidden', !show);
@@ -1552,7 +1581,8 @@
                     const input = document.getElementById('sheep-name-input');
                     const statusInfo = document.getElementById('sheep-status-info');
                     const confirmBtn = document.getElementById('sheep-info-confirm');
-                    const slaughterBtn = document.getElementById('sheep-slaughter-button'); // 도축 버튼
+                    const slaughterBtn = document.getElementById('sheep-slaughter-button');
+                    const shearBtn = document.getElementById('sheep-shear-button');
                     
                     input.value = sheep.name;
                     
@@ -1568,7 +1598,29 @@
                         this.toggleSheepInfoModal(false);
                     };
                     
-                    // 도축 버튼 이벤트 핸들러
+                    if (sheep.isAdult) {
+                        shearBtn.classList.remove('hidden');
+                        if (sheep.shearCooldown > 0) {
+                            shearBtn.disabled = true;
+                            shearBtn.textContent = `털 자라는 중 (${sheep.shearCooldown}일)`;
+                        } else {
+                            shearBtn.disabled = false;
+                            shearBtn.textContent = '털 깎기';
+                        }
+                    } else {
+                        shearBtn.classList.add('hidden');
+                    }
+
+                    shearBtn.onclick = () => {
+                        if (sheep.isAdult && sheep.shearCooldown === 0) {
+                            this.game.gameState.wool++;
+                            sheep.shearCooldown = 5;
+                            sheep.isSheared = true;
+                            this.game.logMessage(`${sheep.name}의 털을 깎아 양털 1개를 얻었습니다.`);
+                            this.toggleSheepInfoModal(false);
+                        }
+                    };
+                    
                     slaughterBtn.onclick = () => {
                         const foodGained = sheep.isAdult ? 3 : 1;
                         const message = `${sheep.name}을(를) 도축하시겠습니까? (식량 ${foodGained} 획득)`;
@@ -1676,7 +1728,7 @@
                     this.game.ui.showMessage("판매 수량이 유효하지 않습니다.", 'error');
                     return;
                 }
-                const prices = { '새끼_양': 2, '어른_양': 5, '늑대_가죽': 1 };
+                const prices = { '새끼_양': 2, '어른_양': 5, '늑대_가죽': 1, '양털': 1 };
                 
                 if (item === '새끼_양' || item === '어른_양') {
                     const isAdult = item === '어른_양';
@@ -1703,6 +1755,16 @@
                         this.game.ui.setupMarketModal();
                     } else {
                         this.game.ui.showMessage("보유한 늑대 가죽이 부족합니다.", 'error');
+                    }
+                } else if (item === '양털') {
+                    if (this.game.gameState.wool >= qty) {
+                        this.game.gameState.wool -= qty;
+                        this.game.gameState.gold += prices[item] * qty;
+                        this.game.ui.showMessage(`${qty} 양털 판매 완료!`, 'success');
+                        this.game.logMessage(`${qty} 양털을 판매했습니다. (총 골드: ${this.game.gameState.gold})`);
+                        this.game.ui.setupMarketModal();
+                    } else {
+                        this.game.ui.showMessage("보유한 양털이 부족합니다.", 'error');
                     }
                 }
             }

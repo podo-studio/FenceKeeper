@@ -633,7 +633,7 @@
             }
 
             checkGameOver() {
-                if (this.shepherd.hp <= 0 || (this.entities.filter(e => e instanceof Sheep).length === 0 && this.gameState.day > 1)) {
+                if (this.shepherd.hp <= 0) { // 양치기가 죽었을 때만 게임 오버
                     this.gameState.gameOver = true;
                     this.ui.showGameOverModal();
                     this.logMessage(`게임 오버! ${this.gameState.day}일 생존했습니다.`);

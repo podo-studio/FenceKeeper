@@ -82,6 +82,30 @@
             justify-content: center;
             align-items: center;
         }
+        /* 매뉴얼 스타일 */
+        #manual-content h2 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 0.25rem;
+        }
+        #manual-content h3 {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        #manual-content p, #manual-content ul {
+            margin-bottom: 1rem;
+        }
+        #manual-content ul {
+            list-style-position: inside;
+        }
+        #manual-content li {
+            margin-bottom: 0.5rem;
+        }
     </style>
 </head>
 <body class="w-screen h-screen flex items-center justify-center p-2">
@@ -121,6 +145,7 @@
             <div class="flex flex-col sm:flex-row gap-2">
                 <div id="time-hud" class="hud-item"><span>🕒</span> <span id="time-display">오전 06:00</span></div>
                 <div id="day-hud" class="hud-item"><span>🗓️</span> <span id="day-display">Day 1</span></div>
+                <button id="manual-open-button" class="hud-item font-bold text-lg w-10 h-10 flex items-center justify-center p-0">?</button>
             </div>
             <div class="flex flex-col sm:flex-row gap-2 items-end flex-wrap justify-end">
                 <div id="gold-hud" class="hud-item"><span>💰</span> <span id="gold-display">10</span></div>
@@ -158,6 +183,79 @@
     </div>
 
     <!-- Game Modals -->
+    <div id="manual-modal" class="modal hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="modal-content w-full max-w-2xl p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-3xl font-bold">게임 방법</h2>
+                <button id="close-manual-button" class="text-3xl font-bold">&times;</button>
+            </div>
+            <div id="manual-content">
+                <h2>1. 게임 목표</h2>
+                <p>당신은 양치기 소년입니다. 양들을 늑대의 위협과 굶주림으로부터 보호하고, 자원을 관리하며 최대한 오랫동안 살아남는 것이 목표입니다.</p>
+                
+                <h2>2. 기본 조작</h2>
+                <h3>이동:</h3>
+                <ul>
+                    <li><strong>PC:</strong> `W`, `A`, `S`, `D` 키 또는 방향키(↑, ←, ↓, →)를 사용해 양치기를 움직일 수 있습니다.</li>
+                    <li><strong>모바일:</strong> 화면에 나타나는 가상 조이스틱을 이용해 움직일 수 있습니다.</li>
+                </ul>
+                <h3>상호작용:</h3>
+                <ul>
+                    <li><strong>PC:</strong> 마우스로 양, 개, 버튼 등을 클릭하여 상호작용합니다.</li>
+                    <li><strong>모바일:</strong> 화면을 터치하여 상호작용합니다.</li>
+                </ul>
+
+                <h2>3. 게임 시스템</h2>
+                <h3>시간과 하루</h3>
+                <ul>
+                    <li>게임 속 시간은 자동으로 흐르며, 화면 상단의 시계로 확인할 수 있습니다.</li>
+                    <li>저녁 6시부터 다음 날 아침 6시까지는 밤이 되며, 밤에는 늑대가 나타날 수 있습니다.</li>
+                    <li>하루가 지날 때마다 양이 성장하고, 특정 조건 하에 번식하거나 털이 다시 자랍니다.</li>
+                </ul>
+                <h3>자원</h3>
+                <ul>
+                    <li><strong>💰 골드:</strong> 시장에서 아이템을 사거나 팔 때 사용하는 기본 화폐입니다.</li>
+                    <li><strong>🐑 양:</strong> 가장 중요한 자원입니다. 판매하거나, 털을 깎거나, 도축하여 식량을 얻을 수 있습니다.</li>
+                    <li><strong>🌾 건초:</strong> 양들의 사료입니다. 시장에서 구매하여 목장의 먹이통에 채워줄 수 있습니다.</li>
+                    <li><strong>🍖 식량:</strong> 양치기와 개의 허기를 채우는 데 사용됩니다. 양을 도축하거나 시장에서 구매할 수 있습니다.</li>
+                    <li><strong>🐺 늑대 가죽:</strong> 늑대를 처치하면 얻을 수 있으며, 시장에 판매하여 골드를 얻을 수 있습니다.</li>
+                    <li><strong>🧶 양털:</strong> 성인 양의 털을 깎아 얻을 수 있으며, 시장에 판매할 수 있습니다.</li>
+                    <li><strong>🧱 울타리:</strong> 시장에서 구매하여 원하는 곳에 설치할 수 있는 장애물입니다.</li>
+                </ul>
+
+                <h2>4. 주요 활동</h2>
+                <h3>양 관리</h3>
+                <p>양을 클릭하면 정보 창이 열리며, 다음과 같은 행동을 할 수 있습니다.</p>
+                <ul>
+                    <li><strong>이름 변경:</strong> 양의 이름을 자유롭게 바꿀 수 있습니다.</li>
+                    <li><strong>털 깎기:</strong> 성인 양의 털을 깎아 양털 1개를 얻습니다. 털을 깎은 양은 5일 동안 털을 깎을 수 없습니다.</li>
+                    <li><strong>판매:</strong> 양을 시장 가격으로 즉시 판매합니다. (성인 양: 5골드, 새끼 양: 2골드)</li>
+                    <li><strong>도축:</strong> 양을 도축하여 식량을 얻습니다. (성인 양: 식량 3, 새끼 양: 식량 1)</li>
+                </ul>
+                <h3>개 관리</h3>
+                <ul>
+                    <li><strong>정보 확인:</strong> 개를 직접 클릭하면 정보 창이 열려 이름을 바꾸거나 밥을 줄 수 있습니다.</li>
+                    <li><strong>개별 명령:</strong> 화면 하단의 개 아이콘을 클릭하여 '따라와' 또는 '기다려' 명령을 내릴 수 있습니다.</li>
+                    <li><strong>전체 명령:</strong> '전체 명령' 버튼으로 모든 개에게 동일한 명령을 내릴 수 있습니다. 개는 주변의 늑대를 자동으로 공격합니다.</li>
+                </ul>
+                <h3>울타리 건설</h3>
+                <ul>
+                    <li><strong>건설 모드:</strong> '울타리 짓기' 버튼을 눌러 건설 모드를 켜고 끌 수 있습니다. 모드가 켜지면 버튼이 파란색으로 변하고, 화면 중앙에 "건설 모드" 텍스트가 표시됩니다.</li>
+                    <li><strong>설치:</strong> 건설 모드에서 설치하고 싶은 타일을 클릭하면 울타리가 설치되며, 보유한 울타리 개수가 1 줄어듭니다.</li>
+                    <li><strong>철거:</strong> 건설 모드에서 이미 설치된 울타리를 클릭하면 철거되며, 울타리를 다시 회수합니다.</li>
+                </ul>
+                <h3>시장</h3>
+                <ul>
+                    <li>양치기가 목장 안에 있을 때 '시장' 버튼이 활성화됩니다.</li>
+                    <li>양, 개, 건초, 식량, 울타리 등 다양한 물품을 사거나 팔 수 있습니다.</li>
+                </ul>
+
+                <h2>5. 게임 오버</h2>
+                <p>양치기의 체력(HP)이 0이 되면 게임은 종료됩니다. 굶주리거나 늑대의 공격을 받으면 체력이 감소하니 항상 주의해야 합니다.</p>
+            </div>
+        </div>
+    </div>
+
     <div id="market-modal" class="modal hidden absolute inset-0 flex items-center justify-center p-4">
         <div class="modal-content w-full max-w-lg p-6 rounded-lg shadow-xl overflow-y-auto max-h-full">
             <div class="flex justify-between items-center mb-4">
@@ -1022,7 +1120,7 @@
                                 currentFoodSource.tileObject.richness--;
                                 this.game.logMessage(`${this.name}이(가) 풀을 먹어 배부름이 10 올랐습니다.`);
                                 if (currentFoodSource.tileObject.richness <= 0) {
-                                    currentFoodSource.tileObject.regrowthTimer = 5;
+                                    currentFoodSource.tileObject.regrowthTimer = 10; // 수정된 부분
                                 }
                             } else if (currentFoodSource.type === 'hay') {
                                 this.hunger = Math.min(100, this.hunger + 30);
@@ -1483,6 +1581,9 @@
                 this.feedShepherdButton = document.getElementById('feed-shepherd-button');
                 this.buildFenceButton = document.getElementById('build-fence-button');
                 this.buildModeIndicator = document.getElementById('build-mode-indicator');
+                this.manualOpenButton = document.getElementById('manual-open-button');
+                this.manualModal = document.getElementById('manual-modal');
+                this.closeManualButton = document.getElementById('close-manual-button');
 
                 this.confirmModal = document.getElementById('confirm-modal');
                 this.confirmMessage = document.getElementById('confirm-message');
@@ -1527,15 +1628,14 @@
 
                 this.buildFenceButton.addEventListener('click', () => {
                     this.game.isBuildMode = !this.game.isBuildMode;
+                    this.game.canvas.style.cursor = this.game.isBuildMode ? 'crosshair' : 'pointer';
                     if (this.game.isBuildMode) {
-                        this.game.canvas.style.cursor = 'crosshair';
                         if (this.game.gameState.fences > 0) {
                             this.game.logMessage("울타리 건설/철거 모드를 시작합니다.");
                         } else {
                             this.game.logMessage("보유한 울타리가 없습니다. 철거는 가능합니다.");
                         }
                     } else {
-                        this.game.canvas.style.cursor = 'pointer';
                         this.game.logMessage("울타리 건설/철거 모드를 종료합니다.");
                     }
                 });
@@ -1567,6 +1667,9 @@
                     const commandText = dog.command === 'follow' ? '따라와' : '기다려';
                     this.game.logMessage(`${dog.name}에게 '${commandText}' 명령을 내렸습니다.`);
                 });
+                
+                this.manualOpenButton.addEventListener('click', () => this.toggleManualModal(true));
+                this.closeManualButton.addEventListener('click', () => this.toggleManualModal(false));
 
                 this.marketMessageDisplay = document.getElementById('market-message');
             }
@@ -1900,6 +2003,11 @@
                     this.confirmNoButton.onclick = () => { onCancel(); this.toggleConfirmModal(false); };
                 }
             }
+            
+            toggleManualModal(show) {
+                this.manualModal.classList.toggle('hidden', !show);
+                this.game.gameState.paused = show;
+            }
         }
         
         class Market {
@@ -2036,7 +2144,7 @@
         const introModal = document.getElementById('introModal');
         const startButton = document.getElementById('startButton');
         const gameContainer = document.getElementById('game-container');
-
+        
         startButton.addEventListener('click', () => {
             introModal.style.display = 'none';
             gameContainer.style.display = 'block';

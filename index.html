@@ -95,7 +95,7 @@
         <!-- 상호작용 버튼들 -->
         <div class="absolute bottom-2 right-2 flex flex-col gap-2">
             <button id="hay-action-button" class="hidden hud-item"></button>
-            <button id="gate-button" class="hidden hud-item">🚪 문 닫기</button>
+            <button id="gate-button" class="hidden hud-item">� 문 닫기</button>
             <button id="market-button" class="hidden hud-item">🛒 시장</button>
             <button id="dog-command-all-button" class="hidden hud-item">🐾 전체 명령</button>
         </div>
@@ -254,7 +254,14 @@
                     pasture: { 
                         x: 800, y: 550, width: 400, height: 400, 
                         gate: { x: 960, y: 950, width: 80, height: 20, isOpen: true },
-                        trough: { x: 820, y: 600, width: 100, height: 20, hayAmount: 0, maxHay: 10 },
+                        // Trough now has tiles
+                        trough: {
+                            x: 820, y: 600, width: 200, height: 20, // Increased width for 10 tiles
+                            troughTiles: [], // Array to hold individual hay tiles
+                            maxHayPerTile: 3,
+                            numTroughTiles: 10,
+                            hayAmount: 0 // Will be calculated dynamically
+                        },
                         haystack: { x: 1150, y: 880, radius: 30 }
                     },
                     grassPatches: []
@@ -266,6 +273,12 @@
                     { x: 200, y: 1100, width: 250, height: 250 },
                     { x: 1600, y: 1200, width: 300, height: 200 },
                 ]);
+
+                // Initialize trough tiles
+                this.initializeTroughTiles();
+                // Calculate initial hay amount
+                this.world.pasture.trough.hayAmount = this.calculateTroughHayAmount();
+
 
                 this.camera = { x: 0, y: 0 };
                 this.input = new InputHandler(this);
@@ -295,6 +308,24 @@
                 });
             }
 
+            initializeTroughTiles() {
+                const trough = this.world.pasture.trough;
+                trough.troughTiles = [];
+                for (let i = 0; i < trough.numTroughTiles; i++) {
+                    trough.troughTiles.push({ richness: 0, maxRichness: trough.maxHayPerTile });
+                }
+            }
+            // New helper to calculate total hay in trough
+            calculateTroughHayAmount() {
+                const trough = this.world.pasture.trough;
+                return trough.troughTiles.reduce((sum, tile) => sum + tile.richness, 0);
+            }
+            // New helper to calculate total max hay in trough
+            calculateTroughMaxHay() {
+                const trough = this.world.pasture.trough;
+                return trough.numTroughTiles * trough.maxHayPerTile;
+            }
+
             // 게임 시작
             start() {
                 this.shepherd = new Shepherd(this, this.world.pasture.x + 50, this.world.pasture.y + 50);
@@ -321,6 +352,8 @@
                 this.updateTime(deltaTime);
                 this.updateLeaderSheep();
                 this.entities = this.entities.filter(e => !e.isDead); // 죽은 엔티티 제거
+                // Call input.update() here to get the latest input state before other entities update
+                this.input.update(); // InputHandler의 update 호출
                 this.entities.forEach(e => e.update(deltaTime));
                 this.spawnWolves();
                 this.updateCamera();
@@ -368,17 +401,43 @@
                 this.ctx.strokeStyle = '#8B4513';
                 this.ctx.lineWidth = 10;
                 this.ctx.strokeRect(p.x, p.y, p.width, p.height);
+                
+                // Draw outer trough structure
+                this.ctx.fillStyle = '#A0522D';
+                this.ctx.fillRect(p.trough.x, p.trough.y, p.trough.width, p.trough.height); // Draw the base trough
+
+                // Draw trough tiles
+                const troughTileWidth = p.trough.width / p.trough.numTroughTiles;
+                const troughTileHeight = p.trough.height;
+                p.trough.troughTiles.forEach((tile, index) => {
+                    if (tile.richness > 0) {
+                        const fillRatio = tile.richness / tile.maxRichness;
+                        const hayFillHeight = troughTileHeight * fillRatio;
+                        this.ctx.fillStyle = '#f0e68c'; // Hay color
+                        this.ctx.fillRect(
+                            p.trough.x + index * troughTileWidth,
+                            p.trough.y + troughTileHeight - hayFillHeight,
+                            troughTileWidth,
+                            hayFillHeight
+                        );
+                    }
+                    // Draw lines between trough tiles for visual separation
+                    this.ctx.strokeStyle = '#8B4513'; // Darker color for trough lines
+                    this.ctx.lineWidth = 1;
+                    this.ctx.strokeRect(
+                        p.trough.x + index * troughTileWidth,
+                        p.trough.y,
+                        troughTileWidth,
+                        troughTileHeight
+                    );
+                });
+
+
                 this.ctx.fillStyle = '#DAA520';
                 this.ctx.beginPath();
                 this.ctx.arc(p.haystack.x, p.haystack.y, p.haystack.radius, 0, Math.PI * 2);
                 this.ctx.fill();
-                this.ctx.fillStyle = '#A0522D';
-                this.ctx.fillRect(p.trough.x, p.trough.y, p.trough.width, p.trough.height);
-                if (p.trough.hayAmount > 0) {
-                    this.ctx.fillStyle = '#f0e68c';
-                    const hayHeight = p.trough.height * (p.trough.hayAmount / p.trough.maxHay);
-                    this.ctx.fillRect(p.trough.x, p.trough.y + p.trough.height - hayHeight, p.trough.width, hayHeight);
-                }
+                
                 const gate = p.gate;
                 if (gate.isOpen) {
                     this.ctx.clearRect(gate.x, gate.y - 5, gate.width, gate.height);
@@ -473,15 +532,32 @@
             transferHay(direction, quantity) {
                 const trough = this.world.pasture.trough;
                 if (direction === 'toTrough') {
-                    const amount = Math.min(quantity, this.gameState.hayStock, trough.maxHay - trough.hayAmount);
-                    this.gameState.hayStock -= amount;
-                    trough.hayAmount += amount;
-                    this.logMessage(`건초 ${amount}개를 먹이통에 넣었습니다. (남은 건초: ${this.gameState.hayStock})`);
+                    let amountToTransfer = quantity;
+                    for (let i = 0; i < trough.troughTiles.length && amountToTransfer > 0; i++) {
+                        const tile = trough.troughTiles[i];
+                        const spaceInTile = tile.maxRichness - tile.richness;
+                        const transferToTile = Math.min(amountToTransfer, this.gameState.hayStock, spaceInTile);
+                        if (transferToTile > 0) {
+                            tile.richness += transferToTile;
+                            this.gameState.hayStock -= transferToTile;
+                            amountToTransfer -= transferToTile;
+                        }
+                    }
+                    this.world.pasture.trough.hayAmount = this.calculateTroughHayAmount(); // Update total
+                    this.logMessage(`건초 ${quantity - amountToTransfer}개를 먹이통에 넣었습니다. (남은 건초: ${this.gameState.hayStock})`);
                 } else if (direction === 'fromTrough') {
-                    const amount = Math.min(quantity, trough.hayAmount);
-                    trough.hayAmount -= amount;
-                    this.gameState.hayStock += amount;
-                    this.logMessage(`건초 ${amount}개를 먹이통에서 창고로 옮겼습니다. (총 건초: ${this.gameState.hayStock})`);
+                    let amountToTransfer = quantity;
+                    for (let i = 0; i < trough.troughTiles.length && amountToTransfer > 0; i++) {
+                        const tile = trough.troughTiles[i];
+                        const transferFromTile = Math.min(amountToTransfer, tile.richness);
+                        if (transferFromTile > 0) {
+                            tile.richness -= transferFromTile;
+                            this.gameState.hayStock += transferFromTile;
+                            amountToTransfer -= transferFromTile;
+                        }
+                    }
+                    this.world.pasture.trough.hayAmount = this.calculateTroughHayAmount(); // Update total
+                    this.logMessage(`건초 ${quantity - amountToTransfer}개를 먹이통에서 창고로 옮겼습니다. (총 건초: ${this.gameState.hayStock})`);
                 }
             }
 
@@ -490,7 +566,7 @@
                 if (this.leaderSheep && !this.leaderSheep.isDead) return;
 
                 if (this.leaderSheep) {
-                    this.leaderSheep.isLeader = false;
+                    this.leaderSheep.isLeader = false; // Fix: Assign false to isLeader property
                     this.leaderSheep = null;
                 }
 
@@ -656,10 +732,15 @@
                 this.name = '양치기'; // 양치기 이름 설정
             }
             update(deltaTime) {
-                const dxInput = this.game.input.moveX; const dyInput = this.game.input.moveY;
+                const dxInput = this.game.input.moveX; // InputHandler에서 가져온 x 방향 입력
+                const dyInput = this.game.input.moveY; // InputHandler에서 가져온 y 방향 입력
+                
+                // console.log(`Shepherd.update: dxInput=${dxInput}, dyInput=${dyInput}`); // 디버깅 로그 추가
+
                 if (dxInput !== 0 || dyInput !== 0) {
                     const magnitude = Math.sqrt(dxInput * dxInput + dyInput * dyInput);
-                    const dx = (dxInput / magnitude) * this.speed; const dy = (dyInput / magnitude) * this.speed;
+                    const dx = (dxInput / magnitude) * this.speed; 
+                    const dy = (dyInput / magnitude) * this.speed;
                     this.applyMovement(dx, dy);
                 }
                 super.update(deltaTime);
@@ -676,6 +757,7 @@
                 this.name = `양 #${Math.floor(Math.random() * 1000)}`;
                 this.perceptionRange = 250;
                 this.eatingGrassTimer = 0; // 풀을 먹는 딜레이 타이머
+                this.eatingHayTimer = 0; // 건초를 먹는 딜레이 타이머
             }
             update(deltaTime) {
                 this.stateTimer -= 1; this.hunger -= 0.01;
@@ -698,142 +780,184 @@
                 let finalDx = 0, finalDy = 0; 
 
                 // AI State Machine - Priority based
-                if (dangers.length > 0) {
-                    this.state = 'fleeing'; // 위험 감지 시 도망
-                    this.eatingGrassTimer = 0; // 위험 감지 시 풀 먹기 타이머 초기화
-                } else if (inPasture && trough.hayAmount > 0 && this.hunger < 50) {
-                    this.state = 'seeking_hay'; // 목장 안에 있고 건초가 있으며 배고프면 건초 찾기
-                    this.eatingGrassTimer = 0;
-                } else if (currentTileInfo && this.hunger < 100) {
-                    // 풀 위에 있을 때만 먹기 상태로 전환
-                    if (this.state !== 'eating_grass') {
-                        // 처음 풀 위에 도달했을 때 타이머 시작
-                        this.eatingGrassTimer = config.GRASS_EATING_DELAY;
-                        this.state = 'eating_grass';
-                    } else if (this.eatingGrassTimer <= 0) {
-                        // 타이머가 만료되면 풀 소비
-                        this.hunger = Math.min(100, this.hunger + 5); 
-                        currentTileInfo.tileObject.richness = Math.max(0, currentTileInfo.tileObject.richness - 1);
-                        if (currentTileInfo.tileObject.richness <= 0) {
-                            this.target = this.findAdjacentTile(currentTileInfo.patch, currentTileInfo.r, currentTileInfo.c);
-                            if (this.target) {
-                                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                                finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                // 우선순위 분기: 먹는 중이면 건너뛴다
+                if (this.state === 'eating_hay' || this.state === 'eating_grass') {
+                    // 현재 먹는 상태를 유지하고, 먹이 소비 로직만 실행
+                    if (this.state === 'eating_hay') {
+                        this.eatingHayTimer -= deltaTime;
+                        if (!this.target || !this.target.tileObject || this.target.tileObject.richness <= 0) {
+                            // 현재 먹이통 타일이 비었거나 유효하지 않으면 새로운 건초를 찾거나 배회
+                            this.state = 'seeking_hay'; // 다시 건초를 찾도록 전환
+                            this.eatingHayTimer = 0; // 타이머 초기화
+                        } else if (this.eatingHayTimer <= 0) {
+                            this.hunger = Math.min(100, this.hunger + 5);
+                            this.target.tileObject.richness = Math.max(0, this.target.tileObject.richness - 1);
+                            this.game.world.pasture.trough.hayAmount = this.game.calculateTroughHayAmount();
+                            this.game.logMessage(`${this.name}이(가) 먹이통에서 건초를 1개 소비했습니다. (남은 건초: ${this.game.world.pasture.trough.hayAmount})`);
+                            
+                            if (this.hunger >= 100 || this.game.calculateTroughHayAmount() === 0) {
+                                this.state = 'wandering';
+                            } else if (this.target.tileObject.richness <= 0) {
+                                this.state = 'seeking_hay'; // 현재 타일 비었으면 다른 타일 찾기
                             }
+                            this.eatingHayTimer = config.GRASS_EATING_DELAY; // 다음 소비를 위해 타이머 재설정
                         }
-                        this.eatingGrassTimer = config.GRASS_EATING_DELAY; // 다시 타이머 설정
-                    } else {
-                        // 풀을 먹는 중에는 움직임을 멈춤
-                        finalDx = 0;
-                        finalDy = 0;
-                        this.eatingGrassTimer -= deltaTime; // 딜레이 타이머 감소
-                    }
-                } else if (this.hunger < 50 && !inPasture) {
-                    this.state = 'seeking_food'; // 목장 밖에 있고 배고프면 풀 찾기
-                    this.eatingGrassTimer = 0;
-                } else if (!this.isAdult && this.findClosest(Sheep, 150, s => s.isAdult)) {
-                    this.state = 'following_adult'; // 새끼 양은 성체 양 따라가기
-                    this.eatingGrassTimer = 0;
-                } else if (!this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this && utils.distance(this, this.game.leaderSheep) < this.perceptionRange) {
-                    this.state = 'following_leader'; // 리더 양 따라가기
-                    this.eatingGrassTimer = 0;
-                } else if (this.state !== 'wandering') {
-                    this.state = 'wandering'; // 기본적으로 배회
-                    this.stateTimer = 0;
-                    this.eatingGrassTimer = 0;
-                }
-                
-                switch(this.state) {
-                    case 'fleeing': // 도망 상태
-                        let avgX = 0, avgY = 0; dangers.forEach(h => { avgX += h.x; avgY += h.y; }); avgX /= dangers.length; avgY /= dangers.length;
-                        const fleeAngle = Math.atan2(this.y - avgY, this.x - avgX);
-                        let fleeDx = Math.cos(fleeAngle);
-                        let fleeDy = Math.sin(fleeAngle);
-
-                        let flockDx = 0, flockDy = 0;
-                        // Declare flockAvgX and flockAvgY outside the if block to ensure they are always defined
-                        let flockAvgX_cohesion = 0; // Renamed to avoid conflict
-                        let flockAvgY_cohesion = 0; // Renamed to avoid conflict
-
-                        const flockmates = this.game.entities.filter(e => e instanceof Sheep && e !== this && utils.distance(this, e) < 150);
-                        if (flockmates.length > 0) {
-                            flockmates.forEach(fm => { flockAvgX_cohesion += fm.x; flockAvgY_cohesion += fm.y; });
-                            flockAvgX_cohesion /= flockmates.length; 
-                            flockAvgY_cohesion /= flockmates.length;
-                            const angleToCenter = Math.atan2(flockAvgY_cohesion - this.y, flockAvgX_cohesion - this.x); // Use renamed variables
-                            flockDx = Math.cos(angleToCenter);
-                            flockDy = Math.sin(angleToCenter);
-                        }
-                        
-                        finalDx = (fleeDx * 1.0) + (flockDx * 0.5); // 도망 + 무리 유지
-                        finalDy = (fleeDy * 1.0) + (flockDy * 0.5);
-                        break;
-                    case 'following_leader': // 리더 따라가기 상태
-                        const leader = this.game.leaderSheep;
-                        if (leader) {
-                            if (utils.distance(this, leader) > 60) {
-                                const angle = Math.atan2(leader.y - this.y, leader.x - this.x);
-                                finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                    } else if (this.state === 'eating_grass') {
+                        this.eatingGrassTimer -= deltaTime;
+                        if (this.eatingGrassTimer <= 0) {
+                            if (currentTileInfo && currentTileInfo.tileObject.richness > 0) {
+                                this.hunger = Math.min(100, this.hunger + 5);
+                                currentTileInfo.tileObject.richness = Math.max(0, currentTileInfo.tileObject.richness - 1);
+                                this.game.logMessage(`${this.name}이(가) 풀을 먹었습니다.`);
                             }
-                        } else { this.state = 'wandering'; }
-                        break;
-                    case 'following_adult': // 성체 양 따라가기 상태
-                        const adult = this.findClosest(Sheep, 150, s => s.isAdult);
-                        if (adult) {
-                            if (utils.distance(this, adult) > 40) {
-                                const angle = Math.atan2(adult.y - this.y, adult.x - this.x);
-                                finalDx = Math.cos(angle); finalDy = Math.sin(angle);
-                            }
-                        } else { this.state = 'wandering'; }
-                        break;
-                    case 'eating_grass': // 풀 먹기 상태
-                        // 풀을 먹는 딜레이 중에는 움직이지 않음 (finalDx, finalDy는 이미 위에서 0으로 설정됨)
-                        if (this.eatingGrassTimer <= 0) { // 타이머가 만료되었을 때만 이동 로직 수행
-                            // 풀 소비 후 인접 타일 탐색
-                            if (currentTileInfo.tileObject.richness <= 0) {
+                            if (currentTileInfo && currentTileInfo.tileObject.richness <= 0) {
                                 this.target = this.findAdjacentTile(currentTileInfo.patch, currentTileInfo.r, currentTileInfo.c);
                                 if (this.target) {
                                     const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
                                     finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                                } else {
+                                    this.state = 'wandering';
                                 }
                             }
+                            this.eatingGrassTimer = config.GRASS_EATING_DELAY;
                         }
-                        break;
-                    case 'seeking_hay': // 건초 찾기 상태
-                        const troughCenter = {x: trough.x + trough.width/2, y: trough.y + trough.height/2};
-                        if (utils.distance(this, troughCenter) < 20) {
-                            this.hunger = Math.min(100, this.hunger + 0.5); trough.hayAmount = Math.max(0, trough.hayAmount - 0.01);
-                        } else { this.target = troughCenter; }
-                        break;
-                    case 'seeking_food': case 'wandering': // 먹이 찾기 또는 배회 상태
-                        let wanderDx = 0, wanderDy = 0, cohesionDx = 0, cohesionDy = 0, separationDx = 0, separationDy = 0;
-                        if (this.stateTimer <= 0 || !this.target || (this.state === 'seeking_food' && utils.distance(this, this.target) < 10)) {
-                            this.target = (this.state === 'seeking_food') ? this.findClosestGrassTile() : { x: this.x + (Math.random() - 0.5) * 200, y: this.y + (Math.random() - 0.5) * 200 };
-                            this.stateTimer = Math.random() * 200 + 100;
-                        }
-                        if (this.target) {
-                            const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                            wanderDx = Math.cos(angle); wanderDy = Math.sin(angle);
-                        }
-                        const flockmatesWander = this.game.entities.filter(e => e instanceof Sheep && e !== this && utils.distance(this, e) < 150);
-                        if (flockmatesWander.length > 0 && this.state === 'wandering') {
-                            let avgX = 0, avgY = 0; flockmatesWander.forEach(fm => { avgX += fm.x; avgY += fm.y; }); avgX /= flockmatesWander.length; avgY /= flockmatesWander.length; 
-                            const angleToCenter = Math.atan2(avgY - this.y, avgX - this.x);
-                            cohesionDx = Math.cos(angleToCenter) * 0.8; cohesionDy = Math.sin(angleToCenter) * 0.8;
-                            flockmatesWander.forEach(fm => {
-                                if (utils.distance(this, fm) < this.radius * 3) {
-                                    const angle = Math.atan2(this.y - fm.y, this.x - fm.x);
-                                    separationDx += Math.cos(angle); separationDy += Math.sin(angle);
+                    }
+                    // 먹는 중에는 움직임을 멈춤
+                    this.vx = 0;
+                    this.vy = 0;
+                } else { // 먹는 중이 아니면 다른 상태 분기 로직 실행
+                    if (dangers.length > 0) {
+                        this.state = 'fleeing';
+                    } else if (inPasture && this.game.calculateTroughHayAmount() > 0 && this.hunger < 50) {
+                        this.state = 'seeking_hay';
+                    } else if (currentTileInfo && this.hunger < 100) {
+                        this.state = 'seeking_food'; // 풀을 찾아 이동 (eating_grass로 직접 전환하지 않음)
+                    } else if (!this.isAdult && this.findClosest(Sheep, 150, s => s.isAdult)) {
+                        this.state = 'following_adult';
+                    } else if (!this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this && utils.distance(this, this.game.leaderSheep) < this.perceptionRange) {
+                        this.state = 'following_leader';
+                    } else if (this.state !== 'wandering') {
+                        this.state = 'wandering';
+                        this.stateTimer = 0;
+                    }
+
+                    // 각 상태에 따른 움직임 계산
+                    switch(this.state) {
+                        case 'fleeing':
+                            let avgX = 0, avgY = 0; dangers.forEach(h => { avgX += h.x; avgY += h.y; }); avgX /= dangers.length; avgY /= dangers.length;
+                            const fleeAngle = Math.atan2(this.y - avgY, this.x - avgX);
+                            let fleeDx = Math.cos(fleeAngle);
+                            let fleeDy = Math.sin(fleeAngle);
+
+                            let flockDx = 0, flockDy = 0;
+                            let flockAvgX = 0; 
+                            let flockAvgY = 0; 
+
+                            const flockmates = this.game.entities.filter(e => e instanceof Sheep && e !== this && utils.distance(this, e) < 150);
+                            if (flockmates.length > 0) {
+                                flockmates.forEach(fm => { flockAvgX += fm.x; flockAvgY += fm.y; });
+                                flockAvgX /= flockmates.length; 
+                                flockAvgY /= flockmates.length;
+                                const angleToCenter = Math.atan2(flockAvgY - this.y, flockAvgX - this.x); 
+                                flockDx = Math.cos(angleToCenter);
+                                flockDy = Math.sin(angleToCenter);
+                            }
+                            finalDx = (fleeDx * 1.0) + (flockDx * 0.5); 
+                            finalDy = (fleeDy * 1.0) + (flockDy * 0.5);
+                            break;
+
+                        case 'following_leader':
+                            const leader = this.game.leaderSheep;
+                            if (leader) {
+                                if (utils.distance(this, leader) > 60) {
+                                    const angle = Math.atan2(leader.y - this.y, leader.x - this.x);
+                                    finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                                }
+                            } else { this.state = 'wandering'; }
+                            break;
+
+                        case 'following_adult':
+                            const adult = this.findClosest(Sheep, 150, s => s.isAdult);
+                            if (adult) {
+                                if (utils.distance(this, adult) > 40) {
+                                    const angle = Math.atan2(adult.y - this.y, adult.x - this.x);
+                                    finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                                }
+                            } else { this.state = 'wandering'; }
+                            break;
+
+                        case 'seeking_hay':
+                            let closestHayTile = null;
+                            let minDistToHayTile = Infinity;
+                            trough.troughTiles.forEach((tile, index) => {
+                                if (tile.richness > 0) {
+                                    const tileCenter = {
+                                        x: trough.x + index * (trough.width / trough.numTroughTiles) + (trough.width / trough.numTroughTiles) / 2,
+                                        y: trough.y + trough.height / 2
+                                    };
+                                    const dist = utils.distance(this, tileCenter);
+                                    if (dist < minDistToHayTile) {
+                                        minDistToHayTile = dist;
+                                        closestHayTile = { tileObject: tile, x: tileCenter.x, y: tileCenter.y };
+                                    }
                                 }
                             });
-                        }
-                        finalDx = wanderDx + cohesionDx + separationDx; finalDy = wanderDy + cohesionDy + separationDy;
-                        break;
-                }
-                // target이 설정된 상태에서 seeking_hay 또는 seeking_food일 경우, 해당 target으로 이동
-                if (this.target && (this.state === 'seeking_hay' || this.state === 'seeking_food')) {
-                    const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
-                    finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+
+                            if (closestHayTile) {
+                                this.target = closestHayTile;
+                                if (utils.distance(this, this.target) < this.radius + 20) {
+                                    this.state = 'eating_hay';
+                                    this.eatingHayTimer = config.GRASS_EATING_DELAY;
+                                } else {
+                                    const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                                    finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                                }
+                            } else {
+                                this.state = 'wandering';
+                            }
+                            break;
+
+                        case 'seeking_food':
+                            let closestGrassTile = this.findClosestGrassTile();
+                            if (closestGrassTile) {
+                                this.target = closestGrassTile;
+                                if (utils.distance(this, this.target) < this.radius + 10) {
+                                    this.state = 'eating_grass';
+                                    this.eatingGrassTimer = config.GRASS_EATING_DELAY;
+                                } else {
+                                    const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                                    finalDx = Math.cos(angle); finalDy = Math.sin(angle);
+                                }
+                            } else {
+                                this.state = 'wandering';
+                            }
+                            break;
+
+                        case 'wandering':
+                            let wanderDx = 0, wanderDy = 0, cohesionDx = 0, cohesionDy = 0, separationDx = 0, separationDy = 0;
+                            if (this.stateTimer <= 0 || !this.target || utils.distance(this, this.target) < 10) {
+                                this.target = { x: this.x + (Math.random() - 0.5) * 200, y: this.y + (Math.random() - 0.5) * 200 };
+                                this.stateTimer = Math.random() * 200 + 100;
+                            }
+                            if (this.target) {
+                                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                                wanderDx = Math.cos(angle); wanderDy = Math.sin(angle);
+                            }
+                            const flockmatesWander = this.game.entities.filter(e => e instanceof Sheep && e !== this && utils.distance(this, e) < 150);
+                            if (flockmatesWander.length > 0) {
+                                let avgX = 0, avgY = 0; flockmatesWander.forEach(fm => { avgX += fm.x; avgY += fm.y; }); avgX /= flockmatesWander.length; avgY /= flockmatesWander.length; 
+                                const angleToCenter = Math.atan2(avgY - this.y, avgX - this.x);
+                                cohesionDx = Math.cos(angleToCenter) * 0.8; cohesionDy = Math.sin(angleToCenter) * 0.8;
+                                flockmatesWander.forEach(fm => {
+                                    if (utils.distance(this, fm) < this.radius * 3) {
+                                        const angle = Math.atan2(this.y - fm.y, this.x - fm.x);
+                                        separationDx += Math.cos(angle); separationDy += Math.sin(angle);
+                                    }
+                                });
+                            }
+                            finalDx = wanderDx + cohesionDx + separationDx; finalDy = wanderDy + cohesionDy + separationDy;
+                            break;
+                    }
                 }
                 
                 let desiredVx = 0; let desiredVy = 0;
@@ -846,14 +970,14 @@
                     desiredVy = (finalDy / magnitude) * currentSpeed;
                 }
 
-                // 양이 풀을 먹는 중이 아닐 때만 움직임 적용
-                if (this.state === 'eating_grass' && this.eatingGrassTimer > 0) {
-                    this.vx = 0;
-                    this.vy = 0;
-                } else {
+                // 양이 먹는 중이 아닐 때만 움직임 적용
+                if (!((this.state === 'eating_grass' && this.eatingGrassTimer > 0) || (this.state === 'eating_hay' && this.eatingHayTimer > 0))) {
                     const steeringFactor = 0.1; // 움직임 부드럽게
                     this.vx = this.vx * (1 - steeringFactor) + desiredVx * steeringFactor;
                     this.vy = this.vy * (1 - steeringFactor) + desiredVy * steeringFactor;
+                } else {
+                    this.vx = 0; // 먹는 중에는 움직임 멈춤
+                    this.vy = 0;
                 }
 
                 if (desiredVx === 0 && desiredVy === 0) { this.vx *= 0.95; this.vy *= 0.95; } // 멈출 때 감속
@@ -1032,8 +1156,15 @@
         class InputHandler {
             constructor(game) {
                 this.game = game; this.keys = {}; this.moveX = 0; this.moveY = 0;
-                window.addEventListener('keydown', e => this.keys[e.key] = true);
-                window.addEventListener('keyup', e => this.keys[e.key] = false);
+                // console.log("InputHandler initialized. Listening for keyboard/touch events."); // Debug log
+                window.addEventListener('keydown', e => {
+                    this.keys[e.key] = true;
+                    // console.log("Key down:", e.key); // Debug log
+                });
+                window.addEventListener('keyup', e => {
+                    this.keys[e.key] = false;
+                    // console.log("Key up:", e.key); // Debug log
+                });
                 this.joystick = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0, maxDistance: 50 };
                 if (utils.isMobile()) {
                     document.getElementById('joystick').classList.remove('hidden');
@@ -1042,18 +1173,35 @@
                     this.game.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
                 }
                 this.game.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
-                this.update();
+                // Removed this.update() from constructor - it's now called by Game.update()
             }
             update() {
-                this.moveX = 0; this.moveY = 0;
-                if (this.keys['w'] || this.keys['ArrowUp']) this.moveY = -1; if (this.keys['s'] || this.keys['ArrowDown']) this.moveY = 1;
-                if (this.keys['a'] || this.keys['ArrowLeft']) this.moveX = -1; if (this.keys['d'] || this.keys['ArrowRight']) this.moveX = 1;
+                this.moveX = 0;
+                this.moveY = 0;
+
+                // Keyboard input
+                if (this.keys['w'] || this.keys['W'] || this.keys['ArrowUp']) this.moveY -= 1;
+                if (this.keys['s'] || this.keys['S'] || this.keys['ArrowDown']) this.moveY += 1;
+                if (this.keys['a'] || this.keys['A'] || this.keys['ArrowLeft']) this.moveX -= 1;
+                if (this.keys['d'] || this.keys['D'] || this.keys['ArrowRight']) this.moveX += 1;
+
+                // Joystick input (overrides keyboard if active)
                 if (this.joystick.active) {
-                    const dx = this.joystick.currentX - this.joystick.startX; const dy = this.joystick.currentY - this.joystick.startY;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    if (dist > 0) { this.moveX = dx / dist; this.moveY = dy / dist; }
+                    const dx = this.joystick.currentX - this.joystick.startX;
+                    const dy = this.joystick.currentY - this.joystick.startY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) {
+                        this.moveX = dx / dist;
+                        this.moveY = dy / dist;
+                    } else {
+                        this.moveX = 0;
+                        this.moveY = 0;
+                    }
                 }
-                requestAnimationFrame(this.update.bind(this));
+                // Debug log for movement input
+                // if (this.moveX !== 0 || this.moveY !== 0) {
+                //     console.log(`InputHandler: moveX=${this.moveX.toFixed(2)}, moveY=${this.moveY.toFixed(2)}`);
+                // }
             }
             handleTouchStart(e) {
                 const touch = e.touches[0]; const rect = this.game.canvas.getBoundingClientRect();
@@ -1214,7 +1362,7 @@
                 const canAddToTrough = inPasture && distToHaystack < 80;
                 const canTakeFromTrough = inPasture && distToTrough < 80;
                 this.hayActionButton.classList.toggle('hidden', !(canAddToTrough || canTakeFromTrough));
-                if (canAddToTrough) { this.hayActionButton.innerHTML = '� 건초 넣기'; }
+                if (canAddToTrough) { this.hayActionButton.innerHTML = '🌾 건초 넣기'; }
                 else if (canTakeFromTrough) { this.hayActionButton.innerHTML = '↩️ 건초 되돌리기'; }
                 this.updateDogUI();
             }
@@ -1371,15 +1519,19 @@
                 const minusBtn = document.getElementById('hay-quantity-minus');
                 const plusBtn = document.getElementById('hay-quantity-plus');
                 const trough = this.game.world.pasture.trough;
+                
+                const totalTroughHay = this.game.calculateTroughHayAmount();
+                const totalTroughMaxHay = this.game.calculateTroughMaxHay();
+                
                 let max = 0;
                 if (direction === 'toTrough') {
                     title.textContent = "창고 → 먹이통";
-                    max = Math.floor(Math.min(this.game.gameState.hayStock, trough.maxHay - trough.hayAmount));
-                    info.textContent = `창고 보유량: ${this.game.gameState.hayStock}, 먹이통 여유: ${Math.floor(trough.maxHay - trough.hayAmount)}`;
+                    max = Math.floor(Math.min(this.game.gameState.hayStock, totalTroughMaxHay - totalTroughHay));
+                    info.textContent = `창고 보유량: ${this.game.gameState.hayStock}, 먹이통 여유: ${Math.floor(totalTroughMaxHay - totalTroughHay)}`;
                 } else {
                     title.textContent = "먹이통 → 창고";
-                    max = Math.floor(trough.hayAmount);
-                    info.textContent = `먹이통 보유량: ${Math.floor(trough.hayAmount)}`;
+                    max = Math.floor(totalTroughHay);
+                    info.textContent = `먹이통 보유량: ${Math.floor(totalTroughHay)}`;
                 }
                 input.max = max; slider.max = max;
                 input.value = max > 0 ? 1 : 0; slider.value = max > 0 ? 1 : 0;

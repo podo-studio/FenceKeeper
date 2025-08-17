@@ -3,14 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>양치기 생존 게임</title>
+    <title>양치기 소년</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
     <style>
+        .font-nanum { font-family: 'Nanum Myeongjo', serif; }
+        .font-jua { font-family: 'Jua', sans-serif; }
         body {
             font-family: 'Inter', sans-serif;
             touch-action: none;
             overflow: hidden;
-            background-color: #333;
+            background-color: #111827; /* bg-gray-900 */
         }
         canvas {
             background-color: #6aa84f; /* 낮 배경색 */
@@ -67,11 +72,52 @@
             font-family: monospace;
             line-height: 1.2;
         }
+        #introModal {
+            display: flex;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #111827; /* bg-gray-900 */
+            justify-content: center;
+            align-items: center;
+        }
     </style>
 </head>
 <body class="w-screen h-screen flex items-center justify-center p-2">
 
-    <div id="game-container" class="relative w-full h-full max-w-screen-lg max-h-screen-md aspect-video">
+    <!-- Main Menu Screen -->
+    <div id="introModal">
+        <div class="flex flex-col justify-center items-center h-screen text-center p-4 w-full">
+            <div class="flex-grow flex flex-col justify-center items-center">
+                <h1 class="text-6xl font-bold text-gray-200 mb-4 font-nanum" style="text-shadow: 2px 2px 4px #000;">
+                    양치기 소년
+                </h1>
+                <button id="startButton" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full text-2xl shadow-lg transform hover:scale-105 transition-transform duration-300 mt-12">
+                    게임 시작
+                </button>
+            </div>
+            <div class="pb-8">
+                <div id="logo-container" class="mb-2 w-24 h-24 mx-auto">
+                    <!-- JavaScript will insert the SVG logo here -->
+                </div>
+                <h2 class="text-2xl font-bold text-purple-300 font-jua" style="text-shadow: 1px 1px 2px #000;">
+                    포도 스튜디오
+                </h2>
+                <p class="text-sm text-gray-400 font-jua">
+                    세상에서 가장 달콤한 게임
+                </p>
+                <p class="text-xs text-gray-500 mt-4 font-jua">
+                    © 2025 Podo Studio. All Rights Reserved.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Content -->
+    <div id="game-container" class="relative w-full h-full max-w-screen-lg max-h-screen-md aspect-video" style="display: none;">
         <canvas id="gameCanvas"></canvas>
 
         <!-- HUD -->
@@ -84,15 +130,12 @@
                 <div id="gold-hud" class="hud-item"><span>💰</span> <span id="gold-display">10</span></div>
                 <div id="sheep-hud" class="hud-item"><span>🐑</span> <span id="sheep-display">5</span></div>
                 <div id="hay-hud" class="hud-item"><span>🌾</span> <span id="hay-display">0</span></div>
-                <!-- New HUD item for wolf skin -->
                 <div id="wolf-skin-hud" class="hud-item"><span>🐺</span> <span id="wolf-skin-display">0</span></div>
             </div>
         </div>
         
-        <!-- 개 상태 UI -->
         <div id="dog-status-ui" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2"></div>
 
-        <!-- 상호작용 버튼들 -->
         <div class="absolute bottom-2 right-2 flex flex-col gap-2">
             <button id="hay-action-button" class="hidden hud-item"></button>
             <button id="gate-button" class="hidden hud-item"> 문 닫기</button>
@@ -100,27 +143,23 @@
             <button id="dog-command-all-button" class="hidden hud-item">🐾 전체 명령</button>
         </div>
 
-        <!-- 조이스틱 (모바일 전용) -->
         <div id="joystick" class="joystick hidden">
             <div id="joystick-handle" class="joystick-handle"></div>
         </div>
 
-        <!-- 게임 로그 -->
         <div id="game-log" class="absolute bottom-2 left-2 w-1/4 max-w-xs h-1/4 bg-black bg-opacity-50 text-white p-2 rounded-lg overflow-y-auto text-xs">
             <p class="font-bold mb-1">게임 로그</p>
-            <!-- Log messages will be appended here -->
         </div>
-
     </div>
 
-    <!-- 모달 창들 -->
+    <!-- Game Modals -->
     <div id="market-modal" class="modal hidden absolute inset-0 flex items-center justify-center p-4">
         <div class="modal-content w-full max-w-lg p-6 rounded-lg shadow-xl">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold">시장</h2>
                 <button onclick="game.ui.toggleMarketModal(false)" class="text-2xl font-bold">&times;</button>
             </div>
-            <div id="market-message" class="text-center text-red-600 mb-4 hidden"></div> <!-- Added for messages -->
+            <div id="market-message" class="text-center text-red-600 mb-4 hidden"></div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div id="market-buy-section">
                     <h3 class="font-bold mb-2 text-lg">구매</h3>
@@ -195,7 +234,6 @@
         </div>
     </div>
 
-    <!-- 새로운 확인 모달 -->
     <div id="confirm-modal" class="modal hidden absolute inset-0 flex items-center justify-center p-4">
         <div class="modal-content w-11/12 max-w-sm p-6 rounded-lg shadow-xl text-center">
             <p id="confirm-message" class="text-lg font-semibold mb-6"></p>
@@ -209,15 +247,15 @@
     <script>
         // --- 게임 설정 ---
         const config = {
-            TIME_SCALE: 100, // 시간 흐름 속도 (낮을수록 빠름)
-            DAY_DURATION: 12 * 60, // 12시간 (게임 시간 분 단위)
+            TIME_SCALE: 100,
+            DAY_DURATION: 12 * 60,
             SHEPHERD_SPEED: 2,
             SHEEP_SPEED: 1.5,
             DOG_SPEED: 2.5,
             WOLF_SPEED: 1.8,
-            WOLF_SPAWN_TIME: 21 * 60, // 오후 9시
+            WOLF_SPAWN_TIME: 21 * 60,
             GRASS_TILE_SIZE: 20,
-            GRASS_EATING_DELAY: 2000, // 풀을 먹는 딜레이 (밀리초)
+            GRASS_EATING_DELAY: 2000,
         };
 
         // --- 유틸리티 함수 ---
@@ -239,11 +277,11 @@
                 this.entities = [];
                 this.leaderSheep = null;
                 this.gameState = {
-                    time: 6 * 60, // 오전 6시 시작
+                    time: 6 * 60,
                     day: 1,
                     gold: 10,
                     hayStock: 0,
-                    wolfSkin: 0, // 늑대 가죽 추가
+                    wolfSkin: 0,
                     isNight: false,
                     gameOver: false,
                     paused: false,
@@ -254,48 +292,35 @@
                     pasture: { 
                         x: 800, y: 550, width: 400, height: 400, 
                         gate: { x: 960, y: 950, width: 80, height: 20, isOpen: true },
-                        // Trough now has tiles
                         trough: {
-                            x: 820, y: 600, width: 200, height: 20, // Increased width for 10 tiles
-                            troughTiles: [], // Array to hold individual hay tiles
+                            x: 820, y: 600, width: 200, height: 20,
+                            troughTiles: [],
                             maxHayPerTile: 3,
                             numTroughTiles: 10,
-                            hayAmount: 0 // Will be calculated dynamically
+                            hayAmount: 0
                         },
                         haystack: { x: 1150, y: 880, radius: 30 }
                     },
                     grassPatches: []
                 };
 
-                // [수정] 울타리 밖 10칸을 제외한 모든 공간을 풀로 채우도록 변경
                 const p = this.world.pasture;
-                const margin = 10 * config.GRASS_TILE_SIZE; // 10칸 = 200 픽셀
-
+                const margin = 10 * config.GRASS_TILE_SIZE;
                 const noGrassZone = {
                     x: p.x - margin,
                     y: p.y - margin,
                     width: p.width + margin * 2,
                     height: p.height + margin * 2
                 };
-
-                // noGrassZone을 제외한 4개의 사각형 영역에 풀 생성
                 this.initializeGrassPatches([
-                    // Top patch
                     { x: 0, y: 0, width: this.world.width, height: noGrassZone.y },
-                    // Bottom patch
                     { x: 0, y: noGrassZone.y + noGrassZone.height, width: this.world.width, height: this.world.height - (noGrassZone.y + noGrassZone.height) },
-                    // Left patch
                     { x: 0, y: noGrassZone.y, width: noGrassZone.x, height: noGrassZone.height },
-                    // Right patch
                     { x: noGrassZone.x + noGrassZone.width, y: noGrassZone.y, width: this.world.width - (noGrassZone.x + noGrassZone.width), height: noGrassZone.height }
                 ]);
 
-
-                // Initialize trough tiles
                 this.initializeTroughTiles();
-                // Calculate initial hay amount
                 this.world.pasture.trough.hayAmount = this.calculateTroughHayAmount();
-
 
                 this.camera = { x: 0, y: 0 };
                 this.input = new InputHandler(this);
@@ -305,23 +330,20 @@
                 this.resizeCanvas();
                 window.addEventListener('resize', () => this.resizeCanvas());
 
-                this.logDisplay = document.getElementById('game-log'); // Get the log element
-                this._lastStartedDay = 0; // Prevent startOfDay from being called multiple times per day
-                this._lastEndedDay = 0; // Prevent endOfDay from being called multiple times per day
+                this.logDisplay = document.getElementById('game-log');
+                this._lastStartedDay = 0;
+                this._lastEndedDay = 0;
             }
 
             initializeGrassPatches(patches) {
                 patches.forEach(p => {
-                    // Ensure width and height are non-negative
                     if (p.width <= 0 || p.height <= 0) return;
-                    
                     const patch = { ...p, tiles: [] };
                     const cols = Math.floor(p.width / config.GRASS_TILE_SIZE);
                     const rows = Math.floor(p.height / config.GRASS_TILE_SIZE);
                     for (let r = 0; r < rows; r++) {
                         patch.tiles[r] = [];
                         for (let c = 0; c < cols; c++) {
-                            // [수정] 풀 타일에 재생성 타이머 추가
                             patch.tiles[r][c] = { richness: 1, maxRichness: 3, regrowthTimer: 0 };
                         }
                     }
@@ -336,18 +358,15 @@
                     trough.troughTiles.push({ richness: 0, maxRichness: trough.maxHayPerTile });
                 }
             }
-            // New helper to calculate total hay in trough
             calculateTroughHayAmount() {
                 const trough = this.world.pasture.trough;
                 return trough.troughTiles.reduce((sum, tile) => sum + tile.richness, 0);
             }
-            // New helper to calculate total max hay in trough
             calculateTroughMaxHay() {
                 const trough = this.world.pasture.trough;
                 return trough.numTroughTiles * trough.maxHayPerTile;
             }
 
-            // 게임 시작
             start() {
                 this.shepherd = new Shepherd(this, this.world.pasture.x + 50, this.world.pasture.y + 50);
                 this.entities.push(this.shepherd);
@@ -358,7 +377,6 @@
                 this.gameLoop(0);
             }
 
-            // 메인 게임 루프
             gameLoop(timestamp) {
                 if (this.gameState.gameOver) return;
                 const deltaTime = timestamp - this.lastTime;
@@ -368,13 +386,11 @@
                 requestAnimationFrame(this.gameLoop.bind(this));
             }
 
-            // 게임 상태 업데이트
             update(deltaTime) {
                 this.updateTime(deltaTime);
                 this.updateLeaderSheep();
-                this.entities = this.entities.filter(e => !e.isDead); // 죽은 엔티티 제거
-                // Call input.update() here to get the latest input state before other entities update
-                this.input.update(); // InputHandler의 update 호출
+                this.entities = this.entities.filter(e => !e.isDead);
+                this.input.update();
                 this.entities.forEach(e => e.update(deltaTime));
                 this.spawnWolves();
                 this.updateCamera();
@@ -382,7 +398,6 @@
                 this.checkGameOver();
             }
             
-            // 그리기
             draw() {
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
                 this.ctx.save();
@@ -392,12 +407,10 @@
                 this.ctx.restore();
             }
             
-            // 배경 그리기
             drawBackground() {
                 this.ctx.fillStyle = this.gameState.isNight ? '#4a7c3a' : '#6aa84f';
                 this.ctx.fillRect(0, 0, this.world.width, this.world.height);
                 
-                // 풀밭 타일 그리기
                 this.world.grassPatches.forEach(p => {
                     for (let r = 0; r < p.tiles.length; r++) {
                         for (let c = 0; c < p.tiles[r].length; c++) {
@@ -407,15 +420,12 @@
                                 this.ctx.fillStyle = this.gameState.isNight ? `rgba(56, 102, 65, ${alpha})` : `rgba(88, 129, 87, ${alpha})`;
                                 this.ctx.fillRect(p.x + c * config.GRASS_TILE_SIZE, p.y + r * config.GRASS_TILE_SIZE, config.GRASS_TILE_SIZE, config.GRASS_TILE_SIZE);
                                 
-                                // 풀 수치 표시: 숫자 → 먹이통 스타일 세로 채움 바
                                 const tileX = p.x + c * config.GRASS_TILE_SIZE;
                                 const tileY = p.y + r * config.GRASS_TILE_SIZE;
                                 const s = config.GRASS_TILE_SIZE;
-                                // 외곽선
                                 this.ctx.strokeStyle = 'rgba(0,0,0,0.25)';
                                 this.ctx.lineWidth = 1;
                                 this.ctx.strokeRect(tileX + 2, tileY + 2, s - 4, s - 4);
-                                // 채움
                                 const _max = (tile.maxRichness ?? 3);
                                 const _ratio = Math.max(0, Math.min(1, tile.richness / _max));
                                 const _fillH = (s - 6) * _ratio;
@@ -431,18 +441,16 @@
                 this.ctx.lineWidth = 10;
                 this.ctx.strokeRect(p.x, p.y, p.width, p.height);
                 
-                // Draw outer trough structure
                 this.ctx.fillStyle = '#A0522D';
-                this.ctx.fillRect(p.trough.x, p.trough.y, p.trough.width, p.trough.height); // Draw the base trough
+                this.ctx.fillRect(p.trough.x, p.trough.y, p.trough.width, p.trough.height);
 
-                // Draw trough tiles
                 const troughTileWidth = p.trough.width / p.trough.numTroughTiles;
                 const troughTileHeight = p.trough.height;
                 p.trough.troughTiles.forEach((tile, index) => {
                     if (tile.richness > 0) {
                         const fillRatio = tile.richness / tile.maxRichness;
                         const hayFillHeight = troughTileHeight * fillRatio;
-                        this.ctx.fillStyle = '#f0e68c'; // Hay color
+                        this.ctx.fillStyle = '#f0e68c';
                         this.ctx.fillRect(
                             p.trough.x + index * troughTileWidth,
                             p.trough.y + troughTileHeight - hayFillHeight,
@@ -450,8 +458,7 @@
                             hayFillHeight
                         );
                     }
-                    // Draw lines between trough tiles for visual separation
-                    this.ctx.strokeStyle = '#8B4513'; // Darker color for trough lines
+                    this.ctx.strokeStyle = '#8B4513';
                     this.ctx.lineWidth = 1;
                     this.ctx.strokeRect(
                         p.trough.x + index * troughTileWidth,
@@ -460,7 +467,6 @@
                         troughTileHeight
                     );
                 });
-
 
                 this.ctx.fillStyle = '#DAA520';
                 this.ctx.beginPath();
@@ -476,44 +482,34 @@
                 }
             }
 
-            // 시간 관리
             updateTime(deltaTime) {
                 const prevHour = Math.floor((this.gameState.time - deltaTime / config.TIME_SCALE) / 60);
                 this.gameState.time += deltaTime / config.TIME_SCALE;
                 const currentHour = Math.floor(this.gameState.time / 60);
 
-                // 자정을 넘어가면 날짜 변경 및 endOfDay 호출
                 if (this.gameState.time >= 24 * 60) {
-                    this.gameState.time = this.gameState.time % (24 * 60); // 0부터 23:59:59까지 유지
+                    this.gameState.time = this.gameState.time % (24 * 60);
                     this.gameState.day++;
-                    this.endOfDay(); // 하루가 끝날 때 호출
+                    this.endOfDay();
                 }
                 
                 this.gameState.isNight = currentHour >= 18 || currentHour < 6;
 
-                // 오전 6시가 되면 startOfDay 호출 (단, 5시에서 6시로 넘어가는 순간에만)
                 if (currentHour === 6 && prevHour === 5) {
-                    this.startOfDay(); // 하루가 시작될 때 호출
+                    this.startOfDay();
                 }
             }
             
-            // 하루 시작 시 처리
             startOfDay() {
-                // Prevent multiple calls within the same game day
-                if (this._lastStartedDay === this.gameState.day) {
-                    return;
-                }
+                if (this._lastStartedDay === this.gameState.day) return;
                 this._lastStartedDay = this.gameState.day;
 
-                this.entities = this.entities.filter(e => !(e instanceof Wolf)); // 늑대 제거
-                this.world.pasture.gate.isOpen = true; // 아침에는 문 항상 열림
+                this.entities = this.entities.filter(e => !(e instanceof Wolf));
+                this.world.pasture.gate.isOpen = true;
                 this.logMessage(`새로운 날이 밝았습니다. Day ${this.gameState.day}`);
 
-                // [수정] 풀 재생성 및 성장 로직
-                // 1. 재생성 로직 (매일 실행)
                 this.world.grassPatches.forEach(p => {
                     p.tiles.forEach(row => row.forEach(tile => {
-                        // 5턴 후에 0에서 1로 재생성
                         if (tile.richness === 0 && tile.regrowthTimer > 0) {
                             tile.regrowthTimer--;
                             if (tile.regrowthTimer === 0) {
@@ -523,7 +519,6 @@
                     }));
                 });
 
-                // 2. 성장 로직 (2턴마다 실행)
                 if (this.gameState.day % 2 === 0) {
                     this.world.grassPatches.forEach(p => {
                         p.tiles.forEach(row => row.forEach(tile => {
@@ -537,18 +532,12 @@
                 this.handleBreedingAndGrowth();
             }
 
-            // 하루 종료 시 처리
             endOfDay() {
-                // Prevent multiple calls within the same game day
-                if (this._lastEndedDay === this.gameState.day) {
-                    return;
-                }
+                if (this._lastEndedDay === this.gameState.day) return;
                 this._lastEndedDay = this.gameState.day;
-
                 this.entities.forEach(e => { if (e.endOfDay) e.endOfDay(); });
             }
 
-            // 번식 및 성장
             handleBreedingAndGrowth() {
                 const adultSheepInPasture = this.entities.filter(e => e instanceof Sheep && e.isAdult && !e.breedingCooldown && this.isInsidePasture(e));
                 let breedingPairs = Math.floor(adultSheepInPasture.length / 2);
@@ -559,7 +548,6 @@
                 }
             }
 
-            // 늑대 스폰
             spawnWolves() {
                 if (this.gameState.isNight && this.gameState.time >= config.WOLF_SPAWN_TIME) {
                     if (Math.random() < 0.001 * this.gameState.day) {
@@ -574,17 +562,12 @@
                 }
             }
             
-            // 건초 옮기기
             transferHay(direction, quantity) {
                 const trough = this.world.pasture.trough;
                 if (direction === 'toTrough') {
                     const tiles = trough.troughTiles;
                     const before = this.calculateTroughHayAmount();
-                    let remaining = Math.min(
-                        quantity,
-                        this.gameState.hayStock
-                    );
-                    // 라운드로빈 1개씩 분배
+                    let remaining = Math.min(quantity, this.gameState.hayStock);
                     while (remaining > 0) {
                         let movedThisRound = 0;
                         for (let i = 0; i < tiles.length && remaining > 0; i++) {
@@ -596,7 +579,7 @@
                                 movedThisRound++;
                             }
                         }
-                        if (movedThisRound === 0) break; // 모두 가득 참
+                        if (movedThisRound === 0) break;
                     }
                     trough.hayAmount = this.calculateTroughHayAmount();
                     const transferred = trough.hayAmount - before;
@@ -612,20 +595,17 @@
                             amountToTransfer -= transferFromTile;
                         }
                     }
-                    this.world.pasture.trough.hayAmount = this.calculateTroughHayAmount(); // Update total
+                    this.world.pasture.trough.hayAmount = this.calculateTroughHayAmount();
                     this.logMessage(`건초 ${quantity - amountToTransfer}개를 먹이통에서 창고로 옮겼습니다. (총 건초: ${this.gameState.hayStock})`);
                 }
             }
 
-            // 리더 양 업데이트
             updateLeaderSheep() {
                 if (this.leaderSheep && !this.leaderSheep.isDead) return;
-
                 if (this.leaderSheep) {
-                    this.leaderSheep.isLeader = false; // Fix: Assign false to isLeader property
+                    this.leaderSheep.isLeader = false;
                     this.leaderSheep = null;
                 }
-
                 const adultSheep = this.entities.filter(e => e instanceof Sheep && e.isAdult).sort((a, b) => a.age - b.age);
                 if (adultSheep.length > 0) {
                     this.leaderSheep = adultSheep[0];
@@ -633,7 +613,6 @@
                 }
             }
 
-            // 카메라 업데이트
             updateCamera() {
                 this.camera.x = this.shepherd.x - this.canvas.width / 2;
                 this.camera.y = this.shepherd.y - this.canvas.height / 2;
@@ -641,14 +620,14 @@
                 this.camera.y = Math.max(0, Math.min(this.camera.y, this.world.height - this.canvas.height));
             }
             
-            // 캔버스 크기 조절
             resizeCanvas() {
                 const container = document.getElementById('game-container');
-                this.canvas.width = container.clientWidth;
-                this.canvas.height = container.clientHeight;
+                if (container.clientWidth > 0 && container.clientHeight > 0) {
+                    this.canvas.width = container.clientWidth;
+                    this.canvas.height = container.clientHeight;
+                }
             }
 
-            // 게임 오버 확인
             checkGameOver() {
                 if (this.shepherd.hp <= 0 || (this.entities.filter(e => e instanceof Sheep).length === 0 && this.gameState.day > 1)) {
                     this.gameState.gameOver = true;
@@ -657,18 +636,16 @@
                 }
             }
 
-            // 목장 안에 있는지 확인
             isInsidePasture(entity) {
                 const p = this.world.pasture;
                 return entity.x > p.x && entity.x < p.x + p.width && entity.y > p.y && entity.y < p.y + p.height;
             }
 
-            // 게임 로그 메시지 추가
             logMessage(message) {
                 const p = document.createElement('p');
                 p.textContent = `[${this.ui.getFormattedTime()}] ${message}`;
                 this.logDisplay.appendChild(p);
-                this.logDisplay.scrollTop = this.logDisplay.scrollHeight; // 스크롤을 맨 아래로
+                this.logDisplay.scrollTop = this.logDisplay.scrollHeight;
             }
         }
 
@@ -677,18 +654,17 @@
                 this.game = game; this.x = x; this.y = y; this.radius = radius; this.color = color;
                 this.hp = 100; this.maxHp = 100; this.speed = 1; this.target = null; this.isDead = false;
                 this.name = '';
-                this.deathLogged = false; // 사망 로그 기록 여부 플래그
+                this.deathLogged = false;
             }
             update(deltaTime) {
-                if (this.hp <= 0 && !this.isDead) { // 캐릭터가 죽었을 때
+                if (this.hp <= 0 && !this.isDead) {
                     this.isDead = true;
-                    if (!this.deathLogged) { // 아직 사망 로그가 기록되지 않았다면
-                        // 로그 메시지는 각 서브클래스에서 더 구체적으로 처리
+                    if (!this.deathLogged) {
                         this.deathLogged = true;
                     }
                 }
                 this.resolveCollisions();
-                if (!this.game.gameState.isNight && this.hp < this.maxHp && !this.isDead) { // 낮에 체력 회복 (죽지 않았을 때만)
+                if (!this.game.gameState.isNight && this.hp < this.maxHp && !this.isDead) {
                     this.hp += 0.01;
                 }
             }
@@ -715,7 +691,6 @@
                 this.y += dy;
             }
             resolveCollisions() {
-                // Entity-Entity Collision (엔티티 간 충돌)
                 this.game.entities.forEach(other => {
                     if (this === other || other.isDead) return;
                     const dist = utils.distance(this, other);
@@ -730,11 +705,9 @@
                     }
                 });
 
-                // World boundary (월드 경계)
                 this.x = Math.max(this.radius, Math.min(this.x, this.game.world.width - this.radius));
                 this.y = Math.max(this.radius, Math.min(this.y, this.game.world.height - this.radius));
 
-                // Fence Collision (울타리 충돌)
                 const p = this.game.world.pasture;
                 const g = p.gate;
                 const isInside = this.x > p.x && this.x < p.x + p.width && this.y > p.y && this.y < p.y + p.height;
@@ -743,7 +716,6 @@
                     if (this.x - this.radius < p.x) this.x = p.x + this.radius;
                     if (this.x + this.radius > p.x + p.width) this.x = p.x + p.width - this.radius;
                     if (this.y - this.radius < p.y) this.y = p.y + this.radius;
-                    // Bottom fence with gate (문이 있는 아래 울타리)
                     if (this.y + this.radius > p.y + p.height) {
                         const inGateX = this.x > g.x && this.x < g.x + g.width;
                         if (!g.isOpen || !inGateX) {
@@ -754,13 +726,9 @@
                     const charBox = { left: this.x - this.radius, right: this.x + this.radius, top: this.y - this.radius, bottom: this.y + this.radius };
                     const fenceBox = { left: p.x, right: p.x + p.width, top: p.y, bottom: p.y + p.height };
                     if (charBox.right > fenceBox.left && charBox.left < fenceBox.right && charBox.bottom > fenceBox.top && charBox.top < fenceBox.bottom) {
-                        // Trying to enter from outside (밖에서 안으로 진입 시도)
                         const inGateX = this.x > g.x && this.x < g.x + g.width;
                         const atGateY = Math.abs(this.y - (p.y + p.height)) < this.radius;
-                        if (g.isOpen && inGateX && atGateY) {
-                            // Allow pass (통과 허용)
-                        } else {
-                            // Push out (밖으로 밀어내기)
+                        if (!g.isOpen || !inGateX || !atGateY) {
                             const dx = (this.x - (p.x + p.width / 2));
                             const dy = (this.y - (p.y + p.height / 2));
                             const overlapX = (this.radius + p.width / 2) - Math.abs(dx);
@@ -785,14 +753,12 @@
             constructor(game, x, y) { 
                 super(game, x, y, 15, '#3498db'); 
                 this.speed = config.SHEPHERD_SPEED; 
-                this.name = '양치기'; // 양치기 이름 설정
+                this.name = '양치기';
             }
             update(deltaTime) {
-                const dxInput = this.game.input.moveX; // InputHandler에서 가져온 x 방향 입력
-                const dyInput = this.game.input.moveY; // InputHandler에서 가져온 y 방향 입력
+                const dxInput = this.game.input.moveX;
+                const dyInput = this.game.input.moveY;
                 
-                // console.log(`Shepherd.update: dxInput=${dxInput}, dyInput=${dyInput}`); // 디버깅 로그 추가
-
                 if (dxInput !== 0 || dyInput !== 0) {
                     const magnitude = Math.sqrt(dxInput * dxInput + dyInput * dyInput);
                     const dx = (dxInput / magnitude) * this.speed; 
@@ -816,15 +782,14 @@
                 this.maxHp = 50;
                 this.hp = 50;
                 this.vx = 0;
-                this.vy = 0; // Velocity for smooth movement
+                this.vy = 0;
                 this.isLeader = false;
                 this.name = `양 #${Math.floor(Math.random() * 1000)}`;
-                this.perceptionRange = 100; // 총 시야 거리
-                this.eatingTimer = 0; // 먹이 섭취 딜레이 타이머 (풀, 건초 공용)
+                this.perceptionRange = 100;
+                this.eatingTimer = 0;
             }
 
             update(deltaTime) {
-                // --- 기본 상태 업데이트 ---
                 this.stateTimer -= 1;
                 this.hunger -= 0.01;
                 if (this.hunger <= 0) {
@@ -836,7 +801,6 @@
                     }
                 }
 
-                // --- 주변 환경 감지 ---
                 const dangers = this.game.entities.filter(e => 
                     (e instanceof Wolf && utils.distance(this, e) < 200) ||
                     ((e instanceof Shepherd || e instanceof Dog) && utils.distance(this, e) < 100)
@@ -844,36 +808,27 @@
                 const inPasture = this.game.isInsidePasture(this);
                 const currentFoodSource = this.getCurrentFoodSource();
 
-                // --- 행동 결정 (State Machine) ---
-                // 우선순위 1: 위험 감지 (도망)
                 if (dangers.length > 0) {
                     this.state = 'fleeing';
                 }
-                // 우선순위 2: 먹이 활동 (위험이 없고, 먹이 위에 있으며, 배부르지 않을 때)
                 else if (currentFoodSource && this.hunger < 95) {
                     this.state = 'eating';
                 }
-                // 우선순위 3: 배고픔 (먹이 찾기)
                 else if (this.hunger <= 50) {
                     this.state = 'seeking_food';
                 }
-                // 우선순위 4: 무리 행동 (따라가기)
                 else {
-                    // 새끼 양은 어른 양을 따라감
                     if (!this.isAdult && this.findClosest(Sheep, this.perceptionRange, s => s.isAdult)) {
                         this.state = 'following_adult';
                     }
-                    // 리더가 아닌 양은 리더를 따라감
                     else if (!this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this) {
                         this.state = 'following_leader';
                     }
-                    // 그 외에는 배회
                     else {
                         this.state = 'wandering';
                     }
                 }
 
-                // --- 상태에 따른 행동 실행 및 이동 벡터 계산 ---
                 let finalDx = 0, finalDy = 0;
                 let isMoving = true;
 
@@ -889,16 +844,15 @@
                         break;
 
                     case 'eating':
-                        isMoving = false; // 먹는 동안은 멈춤
+                        isMoving = false;
                         this.eatingTimer -= deltaTime;
                         if (this.eatingTimer <= 0) {
                             if (currentFoodSource.type === 'grass') {
                                 this.hunger = Math.min(100, this.hunger + 10);
                                 currentFoodSource.tileObject.richness--;
                                 this.game.logMessage(`${this.name}이(가) 풀을 먹어 배부름이 10 올랐습니다.`);
-                                // [수정] 풀을 다 먹으면 재생성 타이머 시작
                                 if (currentFoodSource.tileObject.richness <= 0) {
-                                    currentFoodSource.tileObject.regrowthTimer = 5; // 5턴 후 재생성 시작
+                                    currentFoodSource.tileObject.regrowthTimer = 5;
                                 }
                             } else if (currentFoodSource.type === 'hay') {
                                 this.hunger = Math.min(100, this.hunger + 30);
@@ -906,7 +860,7 @@
                                 this.game.world.pasture.trough.hayAmount = this.game.calculateTroughHayAmount();
                                 this.game.logMessage(`${this.name}이(가) 건초를 먹어 배부름이 30 올랐습니다.`);
                             }
-                            this.eatingTimer = config.GRASS_EATING_DELAY; // 다음 섭취 딜레이
+                            this.eatingTimer = config.GRASS_EATING_DELAY;
                         }
                         break;
 
@@ -918,33 +872,30 @@
                             finalDx = Math.cos(angle);
                             finalDy = Math.sin(angle);
                         } else {
-                            // 먹이를 못 찾으면 배회 상태로 전환
                             this.state = 'wandering';
                         }
                         break;
 
                     case 'following_leader':
                         const leader = this.game.leaderSheep;
-                        if (leader && utils.distance(this, leader) > 50) { // 50 거리 유지
+                        if (leader && utils.distance(this, leader) > 50) {
                             const angle = Math.atan2(leader.y - this.y, leader.x - this.x);
                             finalDx = Math.cos(angle);
                             finalDy = Math.sin(angle);
                         }
-                        // 무리 유지 로직 추가
-                        const cohesion_leader = this.calculateCohesionVector(30); // 30 거리 유지
+                        const cohesion_leader = this.calculateCohesionVector(30);
                         finalDx += cohesion_leader.dx * 0.5;
                         finalDy += cohesion_leader.dy * 0.5;
                         break;
 
                     case 'following_adult':
                         const adult = this.findClosest(Sheep, this.perceptionRange, s => s.isAdult);
-                        if (adult && utils.distance(this, adult) > 50) { // 50 거리 유지
+                        if (adult && utils.distance(this, adult) > 50) {
                             const angle = Math.atan2(adult.y - this.y, adult.x - this.x);
                             finalDx = Math.cos(angle);
                             finalDy = Math.sin(angle);
                         }
-                        // 무리 유지 로직 추가
-                        const cohesion_adult = this.calculateCohesionVector(30); // 30 거리 유지
+                        const cohesion_adult = this.calculateCohesionVector(30);
                         finalDx += cohesion_adult.dx * 0.5;
                         finalDy += cohesion_adult.dy * 0.5;
                         break;
@@ -959,14 +910,12 @@
                             finalDx = Math.cos(angle);
                             finalDy = Math.sin(angle);
                         }
-                        // 무리 유지 로직 추가
-                        const cohesion_wander = this.calculateCohesionVector(30); // 30 거리 유지
-                        finalDx += cohesion_wander.dx * 0.8; // 배회 시에는 무리 유지를 더 중요하게
+                        const cohesion_wander = this.calculateCohesionVector(30);
+                        finalDx += cohesion_wander.dx * 0.8;
                         finalDy += cohesion_wander.dy * 0.8;
                         break;
                 }
 
-                // --- 최종 이동 적용 ---
                 let desiredVx = 0, desiredVy = 0;
                 const magnitude = Math.sqrt(finalDx * finalDx + finalDy * finalDy);
                 if (magnitude > 0) {
@@ -982,7 +931,7 @@
                     this.vx = this.vx * (1 - steeringFactor) + desiredVx * steeringFactor;
                     this.vy = this.vy * (1 - steeringFactor) + desiredVy * steeringFactor;
                 } else {
-                    this.vx *= 0.8; // 멈출 때 부드럽게 감속
+                    this.vx *= 0.8;
                     this.vy *= 0.8;
                 }
 
@@ -992,7 +941,6 @@
                 super.update(deltaTime);
             }
 
-            // 주변의 다른 양들과의 거리를 30 이내로 유지하려는 힘 계산
             calculateCohesionVector(flockDistance) {
                 let avgX = 0, avgY = 0;
                 let separationDx = 0, separationDy = 0;
@@ -1002,7 +950,7 @@
                 if (flockmates.length > 0) {
                     flockmates.forEach(fm => {
                         const dist = utils.distance(this, fm);
-                        if (dist < flockDistance) { // 너무 가까우면 밀어냄 (separation)
+                        if (dist < flockDistance) {
                             const angle = Math.atan2(this.y - fm.y, this.x - fm.x);
                             separationDx += Math.cos(angle);
                             separationDy += Math.sin(angle);
@@ -1016,7 +964,6 @@
                         avgX /= count;
                         avgY /= count;
                         const angleToCenter = Math.atan2(avgY - this.y, avgX - this.x);
-                        // 최종 벡터는 무리 중심으로 향하는 힘과 너무 가까운 양을 밀어내는 힘의 합
                         return {
                             dx: Math.cos(angleToCenter) + separationDx,
                             dy: Math.sin(angleToCenter) + separationDy
@@ -1026,9 +973,7 @@
                 return { dx: 0, dy: 0 };
             }
 
-            // 현재 위치의 먹이 정보 반환 (풀 또는 건초)
             getCurrentFoodSource() {
-                // 울타리 안: 먹이통 확인
                 if (this.game.isInsidePasture(this)) {
                     const trough = this.game.world.pasture.trough;
                     const troughTileWidth = trough.width / trough.numTroughTiles;
@@ -1041,7 +986,6 @@
                         }
                     }
                 }
-                // 울타리 밖: 풀 확인
                 else {
                     for (const patch of this.game.world.grassPatches) {
                         if (this.x > patch.x && this.x < patch.x + patch.width && this.y > patch.y && this.y < patch.y + patch.height) {
@@ -1056,9 +1000,7 @@
                 return null;
             }
 
-            // 가장 가까운 유효한 먹이 위치 찾기
             findClosestFood() {
-                // 울타리 안에서는 먹이통만 찾음
                 if (this.game.isInsidePasture(this)) {
                     const trough = this.game.world.pasture.trough;
                     let closestHayTile = null;
@@ -1078,7 +1020,6 @@
                     });
                     return closestHayTile;
                 }
-                // 울타리 밖에서는 풀만 찾음
                 else {
                     let closestGrass = null;
                     let min_dist = this.perceptionRange;
@@ -1144,10 +1085,10 @@
                 if (wolf) {
                     this.target = wolf; this.moveTowards(this.target, this.speed);
                     if (utils.distance(this, this.target) < this.radius + this.target.radius) {
-                        wolf.hp -= 0.5; // 개가 늑대 공격
-                        if (wolf.hp <= 0 && !wolf.isDead && !wolf.deathLogged) { // 늑대가 이 공격으로 죽었다면
+                        wolf.hp -= 0.5;
+                        if (wolf.hp <= 0 && !wolf.isDead && !wolf.deathLogged) {
                             this.game.logMessage(`${this.name}이(가) 늑대 ${wolf.name || ''}를 처치했습니다.`);
-                            wolf.deathLogged = true; // 늑대의 사망 로그 기록 플래그 설정
+                            wolf.deathLogged = true;
                         }
                     }
                 } else {
@@ -1174,23 +1115,19 @@
                 this.speed = config.WOLF_SPEED; 
                 this.maxHp = 100; 
                 this.hp = 100;
-                this._skinDropped = false; // 늑대 가죽 드롭 여부 플래그
-                this.name = `늑대 #${Math.floor(Math.random() * 1000)}`; // 늑대 이름 설정
+                this._skinDropped = false;
+                this.name = `늑대 #${Math.floor(Math.random() * 1000)}`;
             }
             update(deltaTime) {
-                // 이미 죽은 늑대는 업데이트하지 않음
-                if (this.isDead) {
-                    return;
-                }
+                if (this.isDead) return;
 
-                // 체력이 0 이하가 되면 늑대 가죽 드롭
                 if (this.hp <= 0 && !this._skinDropped) {
                     this.game.gameState.wolfSkin++;
                     this.game.logMessage(`늑대 ${this.name || ''}가 죽고 늑대 가죽을 획득했습니다. (총 ${this.game.gameState.wolfSkin}개)`);
                     this._skinDropped = true;
-                    this.isDead = true; // 죽음 상태로 설정
-                    this.deathLogged = true; // 사망 로그 기록 플래그 설정
-                    return; // 더 이상 업데이트하지 않음
+                    this.isDead = true;
+                    this.deathLogged = true;
+                    return;
                 }
 
                 if (!this.target || this.target.isDead) {
@@ -1200,12 +1137,12 @@
                 if (this.target) {
                     this.moveTowards(this.target, this.speed);
                     if (utils.distance(this, this.target) < this.radius + this.target.radius) {
-                        this.target.hp -= 1; // 타겟 공격
-                        if (this.target.hp <= 0 && !this.target.isDead && !this.target.deathLogged) { // 타겟이 이 공격으로 죽었다면
+                        this.target.hp -= 1;
+                        if (this.target.hp <= 0 && !this.target.isDead && !this.target.deathLogged) {
                             if (this.target instanceof Sheep) {
                                 this.game.logMessage(`늑대 ${this.name || ''}이(가) ${this.target.name}을(를) 공격하여 죽였습니다.`);
-                                this.target.deathLogged = true; // 타겟의 사망 로그 기록 플래그 설정
-                                this.target.hp = 0; // 양은 바로 죽음
+                                this.target.deathLogged = true;
+                                this.target.hp = 0;
                             } else if (this.target instanceof Shepherd) {
                                 this.game.logMessage(`늑대 ${this.name || ''}이(가) 양치기 ${this.target.name || ''}를 공격하여 죽였습니다.`);
                                 this.target.deathLogged = true;
@@ -1216,7 +1153,7 @@
                         }
                     }
                 }
-                super.update(deltaTime); // Character의 update를 호출하여 체력 및 isDead 상태 관리
+                super.update(deltaTime);
             }
             findTarget() {
                 let potentialTargets = this.game.entities.filter(e => (e instanceof Sheep || e instanceof Dog || e instanceof Shepherd) && !e.isDead);
@@ -1228,15 +1165,8 @@
         class InputHandler {
             constructor(game) {
                 this.game = game; this.keys = {}; this.moveX = 0; this.moveY = 0;
-                // console.log("InputHandler initialized. Listening for keyboard/touch events."); // Debug log
-                window.addEventListener('keydown', e => {
-                    this.keys[e.key] = true;
-                    // console.log("Key down:", e.key); // Debug log
-                });
-                window.addEventListener('keyup', e => {
-                    this.keys[e.key] = false;
-                    // console.log("Key up:", e.key); // Debug log
-                });
+                window.addEventListener('keydown', e => { this.keys[e.key] = true; });
+                window.addEventListener('keyup', e => { this.keys[e.key] = false; });
                 this.joystick = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0, maxDistance: 50 };
                 if (utils.isMobile()) {
                     document.getElementById('joystick').classList.remove('hidden');
@@ -1245,19 +1175,16 @@
                     this.game.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
                 }
                 this.game.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
-                // Removed this.update() from constructor - it's now called by Game.update()
             }
             update() {
                 this.moveX = 0;
                 this.moveY = 0;
 
-                // Keyboard input
                 if (this.keys['w'] || this.keys['W'] || this.keys['ArrowUp']) this.moveY -= 1;
                 if (this.keys['s'] || this.keys['S'] || this.keys['ArrowDown']) this.moveY += 1;
                 if (this.keys['a'] || this.keys['A'] || this.keys['ArrowLeft']) this.moveX -= 1;
                 if (this.keys['d'] || this.keys['D'] || this.keys['ArrowRight']) this.moveX += 1;
 
-                // Joystick input (overrides keyboard if active)
                 if (this.joystick.active) {
                     const dx = this.joystick.currentX - this.joystick.startX;
                     const dy = this.joystick.currentY - this.joystick.startY;
@@ -1270,10 +1197,6 @@
                         this.moveY = 0;
                     }
                 }
-                // Debug log for movement input
-                // if (this.moveX !== 0 || this.moveY !== 0) {
-                //     console.log(`InputHandler: moveX=${this.moveX.toFixed(2)}, moveY=${this.moveY.toFixed(2)}`);
-                // }
             }
             handleTouchStart(e) {
                 const touch = e.touches[0]; const rect = this.game.canvas.getBoundingClientRect();
@@ -1301,7 +1224,6 @@
                 const worldX = e.clientX - rect.left + this.game.camera.x;
                 const worldY = e.clientY - rect.top + this.game.camera.y;
 
-                // 클릭된 엔티티 확인
                 for (const entity of this.game.entities) {
                     if (entity instanceof Sheep && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {
                         this.game.ui.toggleSheepInfoModal(true, entity);
@@ -1324,14 +1246,13 @@
                 this.goldDisplay = document.getElementById('gold-display'); 
                 this.sheepDisplay = document.getElementById('sheep-display');
                 this.hayDisplay = document.getElementById('hay-display'); 
-                this.wolfSkinDisplay = document.getElementById('wolf-skin-display'); // 늑대 가죽 HUD 요소
+                this.wolfSkinDisplay = document.getElementById('wolf-skin-display');
                 this.gateButton = document.getElementById('gate-button');
                 this.marketButton = document.getElementById('market-button'); 
                 this.hayActionButton = document.getElementById('hay-action-button');
                 this.dogCommandAllButton = document.getElementById('dog-command-all-button'); 
                 this.dogStatusUI = document.getElementById('dog-status-ui');
 
-                // 새로운 확인 모달 요소들
                 this.confirmModal = document.getElementById('confirm-modal');
                 this.confirmMessage = document.getElementById('confirm-message');
                 this.confirmYesButton = document.getElementById('confirm-yes-button');
@@ -1339,38 +1260,28 @@
 
                 this.gateButton.addEventListener('click', () => {
                     const distToGate = utils.distance(this.game.shepherd, {x: this.game.world.pasture.gate.x + 40, y: this.game.world.pasture.gate.y + 10});
-                    if (distToGate < 100) { // 양치기가 문 근처에 있을 때만 작동
+                    if (distToGate < 100) {
                         if (this.game.gameState.isNight && this.game.world.pasture.gate.isOpen) {
-                            // 밤이고 문이 열려있으면, 시간 넘길지 물어봄
                             this.toggleConfirmModal(true, '밤이 깊었습니다. 아침으로 시간을 넘기시겠습니까?', () => {
-                                // 예 (시간 넘기기)
                                 this.game.world.pasture.gate.isOpen = false; 
                                 this.game.logMessage('울타리 문을 닫고 밤을 넘겼습니다.');
                                 
-                                // Ensure end-of-day processes for the current day are completed exactly once
-                                this.game.endOfDay(); // This will age sheep for the day just passed
+                                this.game.endOfDay();
 
-                                // Manually advance day and set time to next morning
-                                // Only increment day if we are skipping from the current day's evening/night (before natural midnight rollover)
                                 const currentHourAtSkip = Math.floor(this.game.gameState.time / 60);
-                                if (currentHourAtSkip >= 18) { // If skipping from 18:00 (6 PM) onwards
-                                    this.game.gameState.day++; // Advance to next day
+                                if (currentHourAtSkip >= 18) {
+                                    this.game.gameState.day++;
                                 }
-                                this.game.gameState.time = 6 * 60; // Set time to 6 AM of the new day (or current day if already past midnight)
+                                this.game.gameState.time = 6 * 60;
 
-                                // Explicitly call startOfDay for the new day.
-                                // The _lastStartedDay flag will ensure it only runs once for this day.
                                 this.game.startOfDay();
-
                                 this.toggleConfirmModal(false);
                             }, () => {
-                                // 아니오 (시간 안 넘기기)
                                 this.game.world.pasture.gate.isOpen = false;
                                 this.game.logMessage('울타리 문을 닫았습니다. 밤이 계속됩니다.');
                                 this.toggleConfirmModal(false);
                             });
                         } else {
-                            // 낮이거나, 밤이지만 문이 닫혀있으면 그냥 토글
                             this.game.world.pasture.gate.isOpen = !this.game.world.pasture.gate.isOpen;
                             this.game.logMessage(`울타리 문을 ${this.game.world.pasture.gate.isOpen ? '열었습니다' : '닫았습니다'}.`);
                         }
@@ -1380,8 +1291,8 @@
                 this.hayActionButton.addEventListener('click', () => {
                     const distToHaystack = utils.distance(this.game.shepherd, this.game.world.pasture.haystack);
                     const distToTrough = utils.distance(this.game.shepherd, {x: this.game.world.pasture.trough.x + 50, y: this.game.world.pasture.trough.y + 10});
-                    if (distToHaystack < 80) this.toggleHayModal(true, 'toTrough'); // 건초더미 근처 -> 먹이통으로 옮기기
-                    else if (distToTrough < 80) this.toggleHayModal(true, 'fromTrough'); // 먹이통 근처 -> 창고로 되돌리기
+                    if (distToHaystack < 80) this.toggleHayModal(true, 'toTrough');
+                    else if (distToTrough < 80) this.toggleHayModal(true, 'fromTrough');
                 });
                 this.dogCommandAllButton.addEventListener('click', () => {
                     const dogs = this.game.entities.filter(e => e instanceof Dog);
@@ -1397,7 +1308,7 @@
                     const dogId = Number(dogDiv.dataset.dogId);
                     const dog = this.game.entities.find(d => d instanceof Dog && d.id === dogId);
                     if (!dog) return;
-                    dog.command = dog.command === 'follow' ? 'stay' : 'follow'; // 개별 개 명령 변경
+                    dog.command = dog.command === 'follow' ? 'stay' : 'follow';
                     this.game.logMessage(`${dog.name}에게 '${dog.command === 'follow' ? '따라와' : '기다려'}' 명령을 내렸습니다.`);
                 });
 
@@ -1414,17 +1325,11 @@
                 this.goldDisplay.textContent = this.game.gameState.gold;
                 this.sheepDisplay.textContent = this.game.entities.filter(e => e instanceof Sheep).length;
                 this.hayDisplay.textContent = this.game.gameState.hayStock;
-                this.wolfSkinDisplay.textContent = this.game.gameState.wolfSkin; // 늑대 가죽 HUD 업데이트
+                this.wolfSkinDisplay.textContent = this.game.gameState.wolfSkin;
 
                 const distToGate = utils.distance(this.game.shepherd, {x: this.game.world.pasture.gate.x + 40, y: this.game.world.pasture.gate.y + 10});
-                // 문 버튼은 양치기가 문 근처에 있으면 항상 표시
                 this.gateButton.classList.toggle('hidden', !(distToGate < 100));
-                // 문 버튼 텍스트 업데이트
-                if (this.game.world.pasture.gate.isOpen) {
-                    this.gateButton.innerHTML = '🚪 문 닫기';
-                } else {
-                    this.gateButton.innerHTML = '🚪 문 열기';
-                }
+                this.gateButton.innerHTML = this.game.world.pasture.gate.isOpen ? '🚪 문 닫기' : '🚪 문 열기';
                 
                 const inPasture = this.game.isInsidePasture(this.game.shepherd);
                 this.marketButton.classList.toggle('hidden', !inPasture);
@@ -1434,7 +1339,7 @@
                 const canAddToTrough = inPasture && distToHaystack < 80;
                 const canTakeFromTrough = inPasture && distToTrough < 80;
                 this.hayActionButton.classList.toggle('hidden', !(canAddToTrough || canTakeFromTrough));
-                if (canAddToTrough) { this.hayActionButton.innerHTML = '� 건초 넣기'; }
+                if (canAddToTrough) { this.hayActionButton.innerHTML = '🌾 건초 넣기'; }
                 else if (canTakeFromTrough) { this.hayActionButton.innerHTML = '↩️ 건초 되돌리기'; }
                 this.updateDogUI();
             }
@@ -1442,57 +1347,40 @@
             showMessage(message, type = 'error') {
                 this.marketMessageDisplay.textContent = message;
                 this.marketMessageDisplay.classList.remove('hidden');
-                if (type === 'error') {
-                    this.marketMessageDisplay.classList.remove('text-green-600');
-                    this.marketMessageDisplay.classList.add('text-red-600');
-                } else {
-                    this.marketMessageDisplay.classList.remove('text-red-600');
-                    this.marketMessageDisplay.classList.add('text-green-600');
-                }
+                this.marketMessageDisplay.classList.toggle('text-red-600', type === 'error');
+                this.marketMessageDisplay.classList.toggle('text-green-600', type !== 'error');
                 setTimeout(() => {
                     this.marketMessageDisplay.classList.add('hidden');
-                }, 3000); // 3초 후 메시지 숨김
+                }, 3000);
             }
 
             updateDogUI() {
-                // Sort dogs by ID to ensure consistent display order in fixed slots
                 const dogs = this.game.entities.filter(e => e instanceof Dog).sort((a, b) => a.id - b.id);
                 
-                // Update visibility of the "command all" button
                 this.dogCommandAllButton.classList.toggle('hidden', dogs.length === 0);
                 
-                // Create a snapshot string for change detection, including the count of active dogs
                 const currentDogInfo = dogs.map(d => `${d.id}:${d.command}:${d.name}`).join('|');
                 const newSnapshot = `${dogs.length}|${currentDogInfo}`;
 
-                // Only re-render if the state of dogs has actually changed
-                if (this._dogStatusSnapshot === newSnapshot) {
-                    return;
-                }
-                this._dogStatusSnapshot = newSnapshot; // Update snapshot
+                if (this._dogStatusSnapshot === newSnapshot) return;
+                this._dogStatusSnapshot = newSnapshot;
 
-                this.dogStatusUI.innerHTML = ''; // Clear existing buttons
+                this.dogStatusUI.innerHTML = '';
 
-                // Render up to 3 fixed slots for dog buttons
                 for (let i = 0; i < 3; i++) {
                     const dogDiv = document.createElement('div');
-                    // Apply fixed width and centering classes to prevent layout shifts
                     dogDiv.className = 'hud-item dog-status-item w-32 flex-none flex flex-col items-center justify-center'; 
                     
-                    const dog = dogs[i]; // Get the dog for this slot, if it exists
+                    const dog = dogs[i];
 
                     if (dog) {
                         dogDiv.dataset.dogId = String(dog.id);
                         const label = (dog.command === 'follow') ? '따라와' : '기다려';
-                        // Ensured text is block and centered for two lines
                         dogDiv.innerHTML = `<span class="block text-center">🐶 ${dog.name}</span> <span class="block text-xs text-center">${label}</span>`;
-                        dogDiv.classList.add('cursor-pointer'); // Make it clickable
-                        // Event listener is handled by delegation on the parent dogStatusUI, no need to attach here
+                        dogDiv.classList.add('cursor-pointer');
                     } else {
-                        // Empty slot: "입양 필요"
-                        dogDiv.classList.remove('cursor-pointer'); // Not clickable
-                        dogDiv.style.opacity = '0.7'; // Slightly dimmed for empty slots
-                        // Ensured text is block and centered for two lines
+                        dogDiv.classList.remove('cursor-pointer');
+                        dogDiv.style.opacity = '0.7';
                         dogDiv.innerHTML = `<span class="block text-center">🐕</span> <span class="block text-xs text-center">입양 필요</span>`;
                     }
                     this.dogStatusUI.appendChild(dogDiv);
@@ -1500,24 +1388,15 @@
             }
             toggleMarketModal(show) {
                 document.getElementById('market-modal').classList.toggle('hidden', !show);
-                this.game.gameState.paused = show; // 게임 일시 정지/재개
-                if (show) this.setupMarketModal(); // 모달이 보일 때마다 시장 정보 업데이트
+                this.game.gameState.paused = show;
+                if (show) this.setupMarketModal();
             }
             setupMarketModal() {
                 const buySection = document.getElementById('market-buy-section');
                 const sellSection = document.getElementById('market-sell-section');
                 
-                // 구매 섹션 초기화 및 업데이트
-                buySection.innerHTML = `
-                    <h3 class="font-bold mb-2 text-lg">구매</h3>
-                    <div id="gold-info-buy" class="text-sm mb-2">현재 골드: ${this.game.gameState.gold}</div>
-                `;
-                
-                // 판매 섹션 초기화 및 업데이트
-                sellSection.innerHTML = `
-                    <h3 class="font-bold mb-2 text-lg">판매</h3>
-                    <div id="gold-info-sell" class="text-sm mb-2">현재 골드: ${this.game.gameState.gold}</div>
-                `;
+                buySection.innerHTML = `<h3 class="font-bold mb-2 text-lg">구매</h3><div id="gold-info-buy" class="text-sm mb-2">현재 골드: ${this.game.gameState.gold}</div>`;
+                sellSection.innerHTML = `<h3 class="font-bold mb-2 text-lg">판매</h3><div id="gold-info-sell" class="text-sm mb-2">현재 골드: ${this.game.gameState.gold}</div>`;
 
                 const createItemHTML = (name, price, current, action) => {
                     const itemId = `${action}-${name.replace(/ /g, '_')}`;
@@ -1527,22 +1406,17 @@
                         else if (name === '어른 양') maxQty = Math.floor(this.game.gameState.gold / 10);
                         else if (name === '개') {
                             const currentDogCount = this.game.entities.filter(e => e instanceof Dog).length;
-                            maxQty = Math.min(Math.floor(this.game.gameState.gold / 50), 3 - currentDogCount); // 개는 최대 3마리
+                            maxQty = Math.min(Math.floor(this.game.gameState.gold / 50), 3 - currentDogCount);
                         }
                         else if (name === '건초') maxQty = Math.floor(this.game.gameState.gold / 1);
-                        maxQty = Math.max(0, maxQty); // 음수가 되지 않도록
-                    } else { // sell
-                        if (name === '새끼 양') {
-                            maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
-                        } else if (name === '어른 양') {
-                            maxQty = this.game.entities.filter(e => e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
-                        } else if (name === '늑대 가죽') {
-                            maxQty = this.game.gameState.wolfSkin;
-                        }
+                        maxQty = Math.max(0, maxQty);
+                    } else {
+                        if (name === '새끼 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
+                        else if (name === '어른 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
+                        else if (name === '늑대 가죽') maxQty = this.game.gameState.wolfSkin;
                     }
 
                     const isDisabled = maxQty === 0 ? 'disabled' : '';
-                    // 슬라이더 초기값: maxQty가 0이면 0, 아니면 1
                     const initialSliderValue = maxQty === 0 ? 0 : 1;
                     
                     return `
@@ -1557,7 +1431,6 @@
                         </div>`;
                 };
 
-                // 현재 보유한 양, 개, 건초, 늑대 가죽 수 업데이트
                 const youngSheepCount = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult).length;
                 const adultSheepCount = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult).length;
                 const dogCount = this.game.entities.filter(e=>e instanceof Dog).length;
@@ -1569,13 +1442,12 @@
                 buySection.innerHTML += createItemHTML('개', 50, dogCount, 'buy');
                 buySection.innerHTML += createItemHTML('건초', 1, hayStockCount, 'buy');
                 
-                // 목장 안에 있는 판매 가능한 양만 계산
                 const sellableYoungSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
                 const sellableAdultSheep = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
 
                 sellSection.innerHTML += createItemHTML('새끼 양', 2, sellableYoungSheep, 'sell');
                 sellSection.innerHTML += createItemHTML('어른 양', 5, sellableAdultSheep, 'sell');
-                sellSection.innerHTML += createItemHTML('늑대 가죽', 1, wolfSkinCount, 'sell'); // 늑대 가죽 판매 추가
+                sellSection.innerHTML += createItemHTML('늑대 가죽', 1, wolfSkinCount, 'sell');
             }
             toggleHayModal(show, direction = 'toTrough') {
                 document.getElementById('hay-modal').classList.toggle('hidden', !show);
@@ -1634,21 +1506,14 @@
                     input.value = sheep.name;
                     
                     if (sheep.isAdult) {
-                        if (sheep.breedingCooldown > 0) {
-                            statusInfo.textContent = `생식까지 ${sheep.breedingCooldown}일 남음`;
-                        } else {
-                            statusInfo.textContent = '번식 가능';
-                        }
+                        statusInfo.textContent = sheep.breedingCooldown > 0 ? `생식까지 ${sheep.breedingCooldown}일 남음` : '번식 가능';
                     } else {
-                        const daysToGrow = 7 - sheep.age;
-                        statusInfo.textContent = `성장까지 ${daysToGrow}일 남음`;
+                        statusInfo.textContent = `성장까지 ${7 - sheep.age}일 남음`;
                     }
 
                     input.focus();
                     confirmBtn.onclick = () => {
-                        if (input.value) {
-                            sheep.name = input.value.substring(0, 15);
-                        }
+                        if (input.value) sheep.name = input.value.substring(0, 15);
                         this.toggleSheepInfoModal(false);
                     };
                 }
@@ -1666,9 +1531,7 @@
                     input.focus();
                     
                     confirmBtn.onclick = () => {
-                        if (input.value) {
-                            dog.name = input.value.substring(0, 15);
-                        }
+                        if (input.value) dog.name = input.value.substring(0, 15);
                         this.toggleDogInfoModal(false);
                     };
                 }
@@ -1678,7 +1541,6 @@
                 document.getElementById('game-over-stats').textContent = `생존 일자: ${this.game.gameState.day}일, 보유 골드: ${this.game.gameState.gold}`;
             }
 
-            // 현재 시간을 "오전/오후 HH:MM" 형식으로 반환하는 헬퍼 함수
             getFormattedTime() {
                 const time = this.game.gameState.time;
                 const hour = Math.floor(time / 60) % 24;
@@ -1688,21 +1550,14 @@
                 return `${period} ${String(displayHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
             }
 
-            // 새로운 확인 모달 토글 함수
             toggleConfirmModal(show, message = '', onConfirm = () => {}, onCancel = () => {}) {
                 this.confirmModal.classList.toggle('hidden', !show);
-                this.game.gameState.paused = show; // 모달이 뜰 때 게임 일시 정지
+                this.game.gameState.paused = show;
 
                 if (show) {
                     this.confirmMessage.textContent = message;
-                    this.confirmYesButton.onclick = () => {
-                        onConfirm();
-                        this.toggleConfirmModal(false);
-                    };
-                    this.confirmNoButton.onclick = () => {
-                        onCancel();
-                        this.toggleConfirmModal(false);
-                    };
+                    this.confirmYesButton.onclick = () => { onConfirm(); this.toggleConfirmModal(false); };
+                    this.confirmNoButton.onclick = () => { onCancel(); this.toggleConfirmModal(false); };
                 }
             }
         }
@@ -1733,7 +1588,7 @@
                     }
                     this.game.ui.showMessage(`${qty} ${item.replace('_', ' ')} 구매 완료!`, 'success');
                     this.game.logMessage(`${qty} ${item.replace('_', ' ')}을(를) 구매했습니다. (남은 골드: ${this.game.gameState.gold})`);
-                    this.game.ui.setupMarketModal(); // 거래 후 UI 업데이트
+                    this.game.ui.setupMarketModal();
                 } else { 
                     this.game.ui.showMessage("골드가 부족합니다.", 'error'); 
                 }
@@ -1745,7 +1600,7 @@
                     this.game.ui.showMessage("판매 수량이 유효하지 않습니다.", 'error');
                     return;
                 }
-                const prices = { '새끼_양': 2, '어른_양': 5, '늑대_가죽': 1 }; // 늑대 가죽 판매 가격 추가
+                const prices = { '새끼_양': 2, '어른_양': 5, '늑대_가죽': 1 };
                 
                 if (item === '새끼_양' || item === '어른_양') {
                     const isAdult = item === '어른_양';
@@ -1753,13 +1608,13 @@
                     if (sheepToSell.length >= qty) {
                         for(let i=0; i<qty; i++) {
                             sheepToSell[i].isDead = true;
-                            this.game.logMessage(`${sheepToSell[i].name}이(가) 시장에 판매되었습니다.`); // 판매 로그 기록
-                            sheepToSell[i].deathLogged = true; // 사망 로그 중복 방지
+                            this.game.logMessage(`${sheepToSell[i].name}이(가) 시장에 판매되었습니다.`);
+                            sheepToSell[i].deathLogged = true;
                         }
                         this.game.gameState.gold += prices[item] * qty;
                         this.game.ui.showMessage(`${qty} ${item.replace('_', ' ')} 판매 완료!`, 'success');
                         this.game.logMessage(`${qty} ${item.replace('_', ' ')}을(를) 판매했습니다. (총 골드: ${this.game.gameState.gold})`);
-                        this.game.ui.setupMarketModal(); // 거래 후 UI 업데이트
+                        this.game.ui.setupMarketModal();
                     } else { 
                         this.game.ui.showMessage(`목장 안에 판매할 ${isAdult ? '어른 양' : '새끼 양'}이 부족합니다.`, 'error'); 
                     }
@@ -1769,7 +1624,7 @@
                         this.game.gameState.gold += prices[item] * qty;
                         this.game.ui.showMessage(`${qty} 늑대 가죽 판매 완료!`, 'success');
                         this.game.logMessage(`${qty} 늑대 가죽을 판매했습니다. (총 골드: ${this.game.gameState.gold})`);
-                        this.game.ui.setupMarketModal(); // 거래 후 UI 업데이트
+                        this.game.ui.setupMarketModal();
                     } else {
                         this.game.ui.showMessage("보유한 늑대 가죽이 부족합니다.", 'error');
                     }
@@ -1777,12 +1632,69 @@
             }
         }
 
+        // --- Podo Studio Logo ---
+        function drawGrapeLogo() {
+            const logoContainer = document.getElementById('logo-container');
+            const svgNS = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(svgNS, "svg");
+            svg.setAttribute("viewBox", "0 0 100 100");
+            svg.setAttribute("width", "100%");
+            svg.setAttribute("height", "100%");
+
+            const grapeColor = "#6d28d9";
+            const stemColor = "#22c55e";
+            const grapeRadius = 13;
+
+            const grapePositions = [
+                { cx: 30, cy: 40, hasBorder: false }, { cx: 70, cy: 40, hasBorder: false }, { cx: 50, cy: 84, hasBorder: false },
+                { cx: 60, cy: 62, hasBorder: true }, { cx: 40, cy: 62, hasBorder: true }, { cx: 50, cy: 40, hasBorder: true },
+            ];
+
+            grapePositions.forEach(pos => {
+                const circle = document.createElementNS(svgNS, "circle");
+                circle.setAttribute("cx", pos.cx);
+                circle.setAttribute("cy", pos.cy);
+                circle.setAttribute("r", grapeRadius);
+                circle.setAttribute("fill", grapeColor);
+                if (pos.hasBorder) {
+                    circle.setAttribute("stroke", "white");
+                    circle.setAttribute("stroke-width", "2.5");
+                }
+                svg.appendChild(circle);
+            });
+
+            const stem = document.createElementNS(svgNS, "line");
+            stem.setAttribute("x1", "50");
+            stem.setAttribute("y1", "27");
+            stem.setAttribute("x2", "50");
+            stem.setAttribute("y2", "20");
+            stem.setAttribute("stroke", stemColor);
+            stem.setAttribute("stroke-width", "5");
+            stem.setAttribute("stroke-linecap", "round");
+            svg.appendChild(stem);
+
+            logoContainer.innerHTML = '';
+            logoContainer.appendChild(svg);
+        }
+
         // --- 게임 초기화 및 실행 ---
         const canvas = document.getElementById('gameCanvas');
         const game = new Game(canvas);
-        game.start();
+        
+        const introModal = document.getElementById('introModal');
+        const startButton = document.getElementById('startButton');
+        const gameContainer = document.getElementById('game-container');
+
+        startButton.addEventListener('click', () => {
+            introModal.style.display = 'none';
+            gameContainer.style.display = 'block';
+            document.body.style.backgroundColor = '#333'; // Change body background for the game
+            game.resizeCanvas(); // Ensure canvas is resized correctly after being displayed
+            game.start();
+        });
+        
+        drawGrapeLogo();
 
     </script>
 </body>
 </html>
-�

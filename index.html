@@ -204,6 +204,8 @@
                     <p id="sheep-status-info" class="mt-1 p-2 bg-gray-100 rounded-md"></p>
                 </div>
                 <button id="sheep-info-confirm" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">확인</button>
+                <!-- 도축 버튼 추가 -->
+                <button id="sheep-slaughter-button" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600">도축</button>
             </div>
         </div>
     </div>
@@ -1550,6 +1552,7 @@
                     const input = document.getElementById('sheep-name-input');
                     const statusInfo = document.getElementById('sheep-status-info');
                     const confirmBtn = document.getElementById('sheep-info-confirm');
+                    const slaughterBtn = document.getElementById('sheep-slaughter-button'); // 도축 버튼
                     
                     input.value = sheep.name;
                     
@@ -1563,6 +1566,19 @@
                     confirmBtn.onclick = () => {
                         if (input.value) sheep.name = input.value.substring(0, 15);
                         this.toggleSheepInfoModal(false);
+                    };
+                    
+                    // 도축 버튼 이벤트 핸들러
+                    slaughterBtn.onclick = () => {
+                        const foodGained = sheep.isAdult ? 3 : 1;
+                        const message = `${sheep.name}을(를) 도축하시겠습니까? (식량 ${foodGained} 획득)`;
+                        
+                        this.toggleConfirmModal(true, message, () => {
+                            this.game.gameState.food += foodGained;
+                            sheep.isDead = true;
+                            this.game.logMessage(`${sheep.name}을(를) 도축하여 식량 ${foodGained}을(를) 얻었습니다.`);
+                            this.toggleSheepInfoModal(false);
+                        });
                     };
                 }
             }

@@ -151,6 +151,10 @@
         <div id="game-log" class="absolute bottom-2 left-2 w-1/4 max-w-xs h-1/4 bg-black bg-opacity-50 text-white p-2 rounded-lg overflow-y-auto text-xs">
             <p class="font-bold mb-1">게임 로그</p>
         </div>
+
+        <div id="build-mode-indicator" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg text-xl font-bold pointer-events-none">
+            건설 모드
+        </div>
     </div>
 
     <!-- Game Modals -->
@@ -1478,6 +1482,7 @@
                 this.dogStatusUI = document.getElementById('dog-status-ui');
                 this.feedShepherdButton = document.getElementById('feed-shepherd-button');
                 this.buildFenceButton = document.getElementById('build-fence-button');
+                this.buildModeIndicator = document.getElementById('build-mode-indicator');
 
                 this.confirmModal = document.getElementById('confirm-modal');
                 this.confirmMessage = document.getElementById('confirm-message');
@@ -1523,12 +1528,14 @@
                 this.buildFenceButton.addEventListener('click', () => {
                     this.game.isBuildMode = !this.game.isBuildMode;
                     if (this.game.isBuildMode) {
+                        this.game.canvas.style.cursor = 'crosshair';
                         if (this.game.gameState.fences > 0) {
                             this.game.logMessage("울타리 건설/철거 모드를 시작합니다.");
                         } else {
                             this.game.logMessage("보유한 울타리가 없습니다. 철거는 가능합니다.");
                         }
                     } else {
+                        this.game.canvas.style.cursor = 'pointer';
                         this.game.logMessage("울타리 건설/철거 모드를 종료합니다.");
                     }
                 });
@@ -1597,6 +1604,12 @@
                 this.feedShepherdButton.classList.toggle('hidden', this.game.gameState.food <= 0);
 
                 this.updateDogUI();
+                
+                // Update build mode UI
+                this.buildFenceButton.classList.toggle('bg-blue-700', this.game.isBuildMode);
+                this.buildFenceButton.classList.toggle('border-2', this.game.isBuildMode);
+                this.buildFenceButton.classList.toggle('border-white', this.game.isBuildMode);
+                this.buildModeIndicator.classList.toggle('hidden', !this.game.isBuildMode);
             }
 
             showMessage(message, type = 'error') {

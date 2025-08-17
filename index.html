@@ -58,7 +58,6 @@
             top: 30px;
             left: 30px;
         }
-        /* 숫자 입력 필드의 화살표 숨기기 */
         input[type=number]::-webkit-inner-spin-button,
         input[type=number]::-webkit-outer-spin-button {
             -webkit-appearance: none;
@@ -67,7 +66,6 @@
         input[type=number] {
             -moz-appearance: textfield;
         }
-        /* 게임 로그 스타일 */
         #game-log {
             font-family: monospace;
             line-height: 1.2;
@@ -100,9 +98,7 @@
                 </button>
             </div>
             <div class="pb-8">
-                <div id="logo-container" class="mb-2 w-24 h-24 mx-auto">
-                    <!-- JavaScript will insert the SVG logo here -->
-                </div>
+                <div id="logo-container" class="mb-2 w-24 h-24 mx-auto"></div>
                 <h2 class="text-2xl font-bold text-purple-300 font-jua" style="text-shadow: 1px 1px 2px #000;">
                     포도 스튜디오
                 </h2>
@@ -130,6 +126,7 @@
                 <div id="gold-hud" class="hud-item"><span>💰</span> <span id="gold-display">10</span></div>
                 <div id="sheep-hud" class="hud-item"><span>🐑</span> <span id="sheep-display">5</span></div>
                 <div id="hay-hud" class="hud-item"><span>🌾</span> <span id="hay-display">0</span></div>
+                <div id="food-hud" class="hud-item"><span>🍖</span> <span id="food-display">5</span></div>
                 <div id="wolf-skin-hud" class="hud-item"><span>🐺</span> <span id="wolf-skin-display">0</span></div>
             </div>
         </div>
@@ -137,6 +134,7 @@
         <div id="dog-status-ui" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2"></div>
 
         <div class="absolute bottom-2 right-2 flex flex-col gap-2">
+            <button id="feed-shepherd-button" class="hidden hud-item">🍖 양치기 밥주기</button>
             <button id="hay-action-button" class="hidden hud-item"></button>
             <button id="gate-button" class="hidden hud-item"> 문 닫기</button>
             <button id="market-button" class="hidden hud-item">🛒 시장</button>
@@ -221,6 +219,11 @@
                     <label for="dog-name-input" class="block text-sm font-medium text-gray-700">이름</label>
                     <input id="dog-name-input" type="text" class="w-full p-2 border rounded-md mt-1">
                 </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-700">배부름</p>
+                    <p id="dog-hunger-info" class="mt-1 p-2 bg-gray-100 rounded-md"></p>
+                </div>
+                <button id="dog-feed-button" class="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600">음식 먹기</button>
                 <button id="dog-info-confirm" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">확인</button>
             </div>
         </div>
@@ -281,6 +284,7 @@
                     day: 1,
                     gold: 10,
                     hayStock: 0,
+                    food: 5, // 식량 추가
                     wolfSkin: 0,
                     isNight: false,
                     gameOver: false,
@@ -655,6 +659,8 @@
                 this.hp = 100; this.maxHp = 100; this.speed = 1; this.target = null; this.isDead = false;
                 this.name = '';
                 this.deathLogged = false;
+                this.hunger = 100;
+                this.maxHunger = 100;
             }
             update(deltaTime) {
                 if (this.hp <= 0 && !this.isDead) {
@@ -663,6 +669,20 @@
                         this.deathLogged = true;
                     }
                 }
+                
+                // Hunger logic for Shepherd and Dog
+                if (this instanceof Shepherd || this instanceof Dog) {
+                    this.hunger -= 0.01; // Hunger decrease rate
+                    if (this.hunger <= 0) {
+                        this.hunger = 0;
+                        this.hp -= 0.02; // HP decrease when starving
+                        if (this.hp <= 0 && !this.isDead && !this.deathLogged) {
+                            this.game.logMessage(`${this.name}이(가) 굶주림으로 죽었습니다.`);
+                            this.deathLogged = true;
+                        }
+                    }
+                }
+
                 this.resolveCollisions();
                 if (!this.game.gameState.isNight && this.hp < this.maxHp && !this.isDead) {
                     this.hp += 0.01;
@@ -684,6 +704,21 @@
                     ctx.fillStyle = '#555'; ctx.fillRect(this.x - this.radius, barY, this.radius * 2, 5);
                     const hpColor = this.hp > this.maxHp * 0.5 ? '#2ecc71' : (this.hp > this.maxHp * 0.25 ? '#f1c40f' : '#e74c3c');
                     ctx.fillStyle = hpColor; ctx.fillRect(this.x - this.radius, barY, this.radius * 2 * (this.hp / this.maxHp), 5);
+                }
+
+                // Draw hunger bar for Shepherd and Dog
+                if ((this instanceof Shepherd || this instanceof Dog) && this.hunger < this.maxHunger) {
+                    ctx.fillStyle = '#7a5c58'; ctx.fillRect(this.x - this.radius, this.y + this.radius + 2, this.radius * 2, 4);
+                    ctx.fillStyle = '#cdab7d'; ctx.fillRect(this.x - this.radius, this.y + this.radius + 2, this.radius * 2 * (this.hunger / this.maxHunger), 4);
+                }
+            }
+            feed() {
+                if (this.game.gameState.food > 0) {
+                    this.game.gameState.food--;
+                    this.hunger = Math.min(this.maxHunger, this.hunger + 50);
+                    this.game.logMessage(`${this.name}에게 음식을 먹였습니다.`);
+                } else {
+                    this.game.logMessage("음식이 부족합니다!");
                 }
             }
             applyMovement(dx, dy) {
@@ -773,7 +808,6 @@
             constructor(game, x, y, isAdult) {
                 super(game, x, y, isAdult ? 12 : 8, 'white');
                 this.speed = config.SHEEP_SPEED;
-                this.hunger = 100;
                 this.isAdult = isAdult;
                 this.age = isAdult ? 7 : 0;
                 this.breedingCooldown = 0;
@@ -1246,17 +1280,25 @@
                 this.goldDisplay = document.getElementById('gold-display'); 
                 this.sheepDisplay = document.getElementById('sheep-display');
                 this.hayDisplay = document.getElementById('hay-display'); 
+                this.foodDisplay = document.getElementById('food-display');
                 this.wolfSkinDisplay = document.getElementById('wolf-skin-display');
                 this.gateButton = document.getElementById('gate-button');
                 this.marketButton = document.getElementById('market-button'); 
                 this.hayActionButton = document.getElementById('hay-action-button');
                 this.dogCommandAllButton = document.getElementById('dog-command-all-button'); 
                 this.dogStatusUI = document.getElementById('dog-status-ui');
+                this.feedShepherdButton = document.getElementById('feed-shepherd-button');
 
                 this.confirmModal = document.getElementById('confirm-modal');
                 this.confirmMessage = document.getElementById('confirm-message');
                 this.confirmYesButton = document.getElementById('confirm-yes-button');
                 this.confirmNoButton = document.getElementById('confirm-no-button');
+
+                this.feedShepherdButton.addEventListener('click', () => {
+                    this.toggleConfirmModal(true, '식사를 하시겠습니까?', () => {
+                        this.game.shepherd.feed();
+                    });
+                });
 
                 this.gateButton.addEventListener('click', () => {
                     const distToGate = utils.distance(this.game.shepherd, {x: this.game.world.pasture.gate.x + 40, y: this.game.world.pasture.gate.y + 10});
@@ -1308,8 +1350,7 @@
                     const dogId = Number(dogDiv.dataset.dogId);
                     const dog = this.game.entities.find(d => d instanceof Dog && d.id === dogId);
                     if (!dog) return;
-                    dog.command = dog.command === 'follow' ? 'stay' : 'follow';
-                    this.game.logMessage(`${dog.name}에게 '${dog.command === 'follow' ? '따라와' : '기다려'}' 명령을 내렸습니다.`);
+                    this.toggleDogInfoModal(true, dog);
                 });
 
                 this.marketMessageDisplay = document.getElementById('market-message');
@@ -1325,6 +1366,7 @@
                 this.goldDisplay.textContent = this.game.gameState.gold;
                 this.sheepDisplay.textContent = this.game.entities.filter(e => e instanceof Sheep).length;
                 this.hayDisplay.textContent = this.game.gameState.hayStock;
+                this.foodDisplay.textContent = this.game.gameState.food;
                 this.wolfSkinDisplay.textContent = this.game.gameState.wolfSkin;
 
                 const distToGate = utils.distance(this.game.shepherd, {x: this.game.world.pasture.gate.x + 40, y: this.game.world.pasture.gate.y + 10});
@@ -1341,6 +1383,9 @@
                 this.hayActionButton.classList.toggle('hidden', !(canAddToTrough || canTakeFromTrough));
                 if (canAddToTrough) { this.hayActionButton.innerHTML = '🌾 건초 넣기'; }
                 else if (canTakeFromTrough) { this.hayActionButton.innerHTML = '↩️ 건초 되돌리기'; }
+                
+                this.feedShepherdButton.classList.toggle('hidden', this.game.gameState.food <= 0);
+
                 this.updateDogUI();
             }
 
@@ -1409,6 +1454,7 @@
                             maxQty = Math.min(Math.floor(this.game.gameState.gold / 50), 3 - currentDogCount);
                         }
                         else if (name === '건초') maxQty = Math.floor(this.game.gameState.gold / 1);
+                        else if (name === '식량') maxQty = Math.floor(this.game.gameState.gold / 1);
                         maxQty = Math.max(0, maxQty);
                     } else {
                         if (name === '새끼 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
@@ -1435,12 +1481,14 @@
                 const adultSheepCount = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult).length;
                 const dogCount = this.game.entities.filter(e=>e instanceof Dog).length;
                 const hayStockCount = this.game.gameState.hayStock;
+                const foodCount = this.game.gameState.food;
                 const wolfSkinCount = this.game.gameState.wolfSkin;
 
                 buySection.innerHTML += createItemHTML('새끼 양', 5, youngSheepCount, 'buy');
                 buySection.innerHTML += createItemHTML('어른 양', 10, adultSheepCount, 'buy');
                 buySection.innerHTML += createItemHTML('개', 50, dogCount, 'buy');
                 buySection.innerHTML += createItemHTML('건초', 1, hayStockCount, 'buy');
+                buySection.innerHTML += createItemHTML('식량', 1, foodCount, 'buy');
                 
                 const sellableYoungSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
                 const sellableAdultSheep = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
@@ -1524,14 +1572,25 @@
                 this.game.gameState.paused = show;
 
                 if (show && dog) {
-                    const input = document.getElementById('dog-name-input');
+                    const nameInput = document.getElementById('dog-name-input');
+                    const hungerInfo = document.getElementById('dog-hunger-info');
+                    const feedButton = document.getElementById('dog-feed-button');
                     const confirmBtn = document.getElementById('dog-info-confirm');
                     
-                    input.value = dog.name;
-                    input.focus();
+                    nameInput.value = dog.name;
+                    hungerInfo.textContent = `${Math.ceil(dog.hunger)} / ${dog.maxHunger}`;
+                    
+                    feedButton.onclick = () => {
+                        dog.feed();
+                        hungerInfo.textContent = `${Math.ceil(dog.hunger)} / ${dog.maxHunger}`; // Update immediately
+                        if (this.game.gameState.food <= 0) {
+                            feedButton.disabled = true;
+                        }
+                    };
+                    feedButton.disabled = this.game.gameState.food <= 0;
                     
                     confirmBtn.onclick = () => {
-                        if (input.value) dog.name = input.value.substring(0, 15);
+                        if (nameInput.value) dog.name = nameInput.value.substring(0, 15);
                         this.toggleDogInfoModal(false);
                     };
                 }
@@ -1571,7 +1630,7 @@
                     this.game.ui.showMessage("구매 수량이 유효하지 않습니다.", 'error');
                     return;
                 }
-                const costs = { '새끼_양': 5, '어른_양': 10, '개': 50, '건초': 1 };
+                const costs = { '새끼_양': 5, '어른_양': 10, '개': 50, '건초': 1, '식량': 1 };
                 const totalCost = costs[item] * qty;
                 if (this.game.gameState.gold >= totalCost) {
                     if (item === '개' && this.game.entities.filter(e => e instanceof Dog).length + qty > 3) { 
@@ -1582,9 +1641,10 @@
                     const pos = {x: this.game.shepherd.x, y: this.game.shepherd.y};
                     for(let i=0; i<qty; i++) {
                         if (item === '새끼_양') this.game.entities.push(new Sheep(this.game, pos.x, pos.y, false));
-                        if (item === '어른_양') this.game.entities.push(new Sheep(this.game, pos.x, pos.y, true));
-                        if (item === '개') this.game.entities.push(new Dog(this.game, pos.x, pos.y));
-                        if (item === '건초') this.game.gameState.hayStock++;
+                        else if (item === '어른_양') this.game.entities.push(new Sheep(this.game, pos.x, pos.y, true));
+                        else if (item === '개') this.game.entities.push(new Dog(this.game, pos.x, pos.y));
+                        else if (item === '건초') this.game.gameState.hayStock++;
+                        else if (item === '식량') this.game.gameState.food++;
                     }
                     this.game.ui.showMessage(`${qty} ${item.replace('_', ' ')} 구매 완료!`, 'success');
                     this.game.logMessage(`${qty} ${item.replace('_', ' ')}을(를) 구매했습니다. (남은 골드: ${this.game.gameState.gold})`);
@@ -1679,7 +1739,7 @@
 
         // --- 게임 초기화 및 실행 ---
         const canvas = document.getElementById('gameCanvas');
-        const game = new Game(canvas);
+        let game = null;
         
         const introModal = document.getElementById('introModal');
         const startButton = document.getElementById('startButton');
@@ -1688,8 +1748,9 @@
         startButton.addEventListener('click', () => {
             introModal.style.display = 'none';
             gameContainer.style.display = 'block';
-            document.body.style.backgroundColor = '#333'; // Change body background for the game
-            game.resizeCanvas(); // Ensure canvas is resized correctly after being displayed
+            document.body.style.backgroundColor = '#333';
+            game = new Game(canvas);
+            game.resizeCanvas();
             game.start();
         });
         

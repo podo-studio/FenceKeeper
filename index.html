@@ -162,6 +162,7 @@
         <div id="dog-status-ui" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2"></div>
 
         <div class="absolute bottom-2 right-2 flex flex-col gap-2">
+            <button id="cut-grass-button" class="hud-item">🌿 풀 베기</button>
             <button id="build-fence-button" class="hud-item">🧱 울타리 짓기</button>
             <button id="feed-shepherd-button" class="hidden hud-item">🍖 양치기 밥주기</button>
             <button id="hay-action-button" class="hidden hud-item"></button>
@@ -180,6 +181,9 @@
 
         <div id="build-mode-indicator" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg text-xl font-bold pointer-events-none">
             건설 모드
+        </div>
+        <div id="cut-mode-indicator" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg text-xl font-bold pointer-events-none">
+            풀베기 모드
         </div>
     </div>
 
@@ -217,7 +221,7 @@
                 <ul>
                     <li><strong>💰 골드:</strong> 시장에서 아이템을 사거나 팔 때 사용하는 기본 화폐입니다.</li>
                     <li><strong>🐑 양:</strong> 가장 중요한 자원입니다. 판매하거나, 털을 깎거나, 도축하여 식량을 얻을 수 있습니다.</li>
-                    <li><strong>🌾 건초:</strong> 양들의 사료입니다. 시장에서 구매하여 목장의 먹이통에 채워줄 수 있습니다.</li>
+                    <li><strong>� 건초:</strong> 양들의 사료입니다. 시장에서 구매하여 목장의 먹이통에 채워줄 수 있습니다.</li>
                     <li><strong>🍖 식량:</strong> 양치기와 개의 허기를 채우는 데 사용됩니다. 양을 도축하거나 시장에서 구매할 수 있습니다.</li>
                     <li><strong>🐺 늑대 가죽:</strong> 늑대를 처치하면 얻을 수 있으며, 시장에 판매하여 골드를 얻을 수 있습니다.</li>
                     <li><strong>🧶 양털:</strong> 성인 양의 털을 깎아 얻을 수 있으며, 시장에 판매할 수 있습니다.</li>
@@ -238,6 +242,12 @@
                     <li><strong>정보 확인:</strong> 개를 직접 클릭하면 정보 창이 열려 이름을 바꾸거나 밥을 줄 수 있습니다.</li>
                     <li><strong>개별 명령:</strong> 화면 하단의 개 아이콘을 클릭하여 '따라와' 또는 '기다려' 명령을 내릴 수 있습니다.</li>
                     <li><strong>전체 명령:</strong> '전체 명령' 버튼으로 모든 개에게 동일한 명령을 내릴 수 있습니다. 개는 주변의 늑대를 자동으로 공격합니다.</li>
+                </ul>
+                <h3>풀 베기</h3>
+                <ul>
+                    <li>'풀 베기' 버튼을 눌러 풀베기 모드를 켜고 끌 수 있습니다.</li>
+                    <li>모드가 켜진 상태에서 완전히 자란 풀(3단계)을 클릭하면 풀을 베어 건초 1개를 획득할 수 있습니다.</li>
+                    <li>덜 자란 풀은 벨 수 없습니다.</li>
                 </ul>
                 <h3>울타리 건설</h3>
                 <ul>
@@ -436,6 +446,7 @@
                     fences: new Set(), // 설치된 울타리 위치
                 };
                 this.isBuildMode = false;
+                this.isCutMode = false; // 풀베기 모드 상태
                 this.mouseGridPos = { x: 0, y: 0 };
 
                 const p = this.world.pasture;
@@ -564,7 +575,7 @@
                 this.ctx.translate(-this.camera.x, -this.camera.y);
                 this.drawBackground();
                 this.entities.sort((a, b) => a.y - b.y).forEach(e => e.draw(this.ctx));
-                this.drawBuildPreview();
+                this.drawModePreview();
                 this.ctx.restore();
             }
             
@@ -687,29 +698,63 @@
                 }
             }
 
-            drawBuildPreview() {
-                if (!this.isBuildMode) return;
-                const fenceSize = config.FENCE_SIZE;
-                const x = this.mouseGridPos.x * fenceSize;
-                const y = this.mouseGridPos.y * fenceSize;
-                const gridX = this.mouseGridPos.x;
-                const gridY = this.mouseGridPos.y;
-                const fenceKey = `${gridX},${gridY}`;
+            drawModePreview() {
+                if (this.isBuildMode) {
+                    const fenceSize = config.FENCE_SIZE;
+                    const x = this.mouseGridPos.x * fenceSize;
+                    const y = this.mouseGridPos.y * fenceSize;
+                    const gridX = this.mouseGridPos.x;
+                    const gridY = this.mouseGridPos.y;
+                    const fenceKey = `${gridX},${gridY}`;
 
-                let previewColor = 'red'; // Default to red (invalid)
+                    let previewColor = 'red'; 
+                    if (this.world.fences.has(fenceKey)) {
+                        previewColor = 'orange';
+                    } else if (this.gameState.fences > 0) {
+                        if (this.canPlaceFence(gridX, gridY)) {
+                            previewColor = 'green';
+                        }
+                    }
+                    this.ctx.globalAlpha = 0.5;
+                    this.ctx.fillStyle = previewColor;
+                    this.ctx.fillRect(x, y, fenceSize, fenceSize);
+                    this.ctx.globalAlpha = 1.0;
 
-                if (this.world.fences.has(fenceKey)) {
-                    previewColor = 'orange'; // Color for demolition
-                } else if (this.gameState.fences > 0) {
-                    if (this.canPlaceFence(gridX, gridY)) {
-                        previewColor = 'green'; // Color for valid placement
+                } else if (this.isCutMode) {
+                    const tileSize = config.GRASS_TILE_SIZE;
+                    const x = this.mouseGridPos.x * tileSize;
+                    const y = this.mouseGridPos.y * tileSize;
+
+                    let previewColor = 'rgba(255, 0, 0, 0.5)'; // Red for invalid
+
+                    const tileInfo = this.getGrassTileAt(this.mouseGridPos.x, this.mouseGridPos.y);
+                    if (tileInfo && tileInfo.tile.richness === tileInfo.tile.maxRichness) {
+                        previewColor = 'rgba(0, 255, 0, 0.5)'; // Green for valid
+                    }
+
+                    this.ctx.fillStyle = previewColor;
+                    this.ctx.fillRect(x, y, tileSize, tileSize);
+                }
+            }
+
+            getGrassTileAt(gridX, gridY) {
+                const tileSize = config.GRASS_TILE_SIZE;
+                for (const patch of this.world.grassPatches) {
+                    const patchStartX = Math.floor(patch.x / tileSize);
+                    const patchStartY = Math.floor(patch.y / tileSize);
+                    const patchEndX = patchStartX + Math.floor(patch.width / tileSize);
+                    const patchEndY = patchStartY + Math.floor(patch.height / tileSize);
+
+                    if (gridX >= patchStartX && gridX < patchEndX && gridY >= patchStartY && gridY < patchEndY) {
+                        const c = gridX - patchStartX;
+                        const r = gridY - patchStartY;
+
+                        if (patch.tiles[r] && patch.tiles[r][c]) {
+                            return { patch, tile: patch.tiles[r][c] };
+                        }
                     }
                 }
-
-                this.ctx.globalAlpha = 0.5;
-                this.ctx.fillStyle = previewColor;
-                this.ctx.fillRect(x, y, fenceSize, fenceSize);
-                this.ctx.globalAlpha = 1.0;
+                return null;
             }
 
             canPlaceFence(gridX, gridY) {
@@ -1685,13 +1730,14 @@
                 document.getElementById('joystick-handle').style.transform = `translate(0px, 0px)`;
             }
             handleMouseMove(e) {
-                if (!this.game.isBuildMode) return;
+                if (!this.game.isBuildMode && !this.game.isCutMode) return;
                 const rect = this.game.canvas.getBoundingClientRect();
                 const worldX = e.clientX - rect.left + this.game.camera.x;
                 const worldY = e.clientY - rect.top + this.game.camera.y;
 
-                const gridX = Math.floor(worldX / config.FENCE_SIZE);
-                const gridY = Math.floor(worldY / config.FENCE_SIZE);
+                const gridSize = this.game.isBuildMode ? config.FENCE_SIZE : config.GRASS_TILE_SIZE;
+                const gridX = Math.floor(worldX / gridSize);
+                const gridY = Math.floor(worldY / gridSize);
 
                 this.game.mouseGridPos = { x: gridX, y: gridY };
             }
@@ -1723,6 +1769,25 @@
                             }
                         } else {
                              this.game.logMessage("보유한 울타리가 없습니다.");
+                        }
+                    }
+                    return;
+                }
+
+                if (this.game.isCutMode) {
+                    const gridX = Math.floor(worldX / config.GRASS_TILE_SIZE);
+                    const gridY = Math.floor(worldY / config.GRASS_TILE_SIZE);
+                    
+                    const tileInfo = this.game.getGrassTileAt(gridX, gridY);
+
+                    if (tileInfo) {
+                        if (tileInfo.tile.richness === tileInfo.tile.maxRichness) {
+                            tileInfo.tile.richness = 0;
+                            tileInfo.tile.regrowthTimer = 10;
+                            this.game.gameState.hayStock++;
+                            this.game.logMessage("풀을 베어 건초 1개를 획득했습니다.");
+                        } else {
+                            this.game.logMessage("완전히 자란 풀만 벨 수 있습니다.");
                         }
                     }
                     return;
@@ -1763,7 +1828,9 @@
                 this.dogStatusUI = document.getElementById('dog-status-ui');
                 this.feedShepherdButton = document.getElementById('feed-shepherd-button');
                 this.buildFenceButton = document.getElementById('build-fence-button');
+                this.cutGrassButton = document.getElementById('cut-grass-button');
                 this.buildModeIndicator = document.getElementById('build-mode-indicator');
+                this.cutModeIndicator = document.getElementById('cut-mode-indicator');
                 this.manualOpenButton = document.getElementById('manual-open-button');
                 this.manualModal = document.getElementById('manual-modal');
                 this.closeManualButton = document.getElementById('close-manual-button');
@@ -1813,8 +1880,8 @@
 
                 this.buildFenceButton.addEventListener('click', () => {
                     this.game.isBuildMode = !this.game.isBuildMode;
-                    this.game.canvas.style.cursor = this.game.isBuildMode ? 'crosshair' : 'pointer';
                     if (this.game.isBuildMode) {
+                        this.game.isCutMode = false;
                         if (this.game.gameState.fences > 0) {
                             this.game.logMessage("울타리 건설/철거 모드를 시작합니다.");
                         } else {
@@ -1823,6 +1890,18 @@
                     } else {
                         this.game.logMessage("울타리 건설/철거 모드를 종료합니다.");
                     }
+                    this.game.canvas.style.cursor = this.game.isBuildMode ? 'crosshair' : 'pointer';
+                });
+
+                this.cutGrassButton.addEventListener('click', () => {
+                    this.game.isCutMode = !this.game.isCutMode;
+                    if (this.game.isCutMode) {
+                        this.game.isBuildMode = false;
+                        this.game.logMessage("풀베기 모드를 시작합니다.");
+                    } else {
+                        this.game.logMessage("풀베기 모드를 종료합니다.");
+                    }
+                    this.game.canvas.style.cursor = this.game.isCutMode ? 'grab' : 'pointer';
                 });
 
                 this.marketButton.addEventListener('click', () => this.toggleMarketModal(true));
@@ -1905,11 +1984,16 @@
 
                 this.updateDogUI();
                 
-                // Update build mode UI
+                // Update mode UI
                 this.buildFenceButton.classList.toggle('bg-blue-700', this.game.isBuildMode);
                 this.buildFenceButton.classList.toggle('border-2', this.game.isBuildMode);
                 this.buildFenceButton.classList.toggle('border-white', this.game.isBuildMode);
                 this.buildModeIndicator.classList.toggle('hidden', !this.game.isBuildMode);
+
+                this.cutGrassButton.classList.toggle('bg-green-700', this.game.isCutMode);
+                this.cutGrassButton.classList.toggle('border-2', this.game.isCutMode);
+                this.cutGrassButton.classList.toggle('border-white', this.game.isCutMode);
+                this.cutModeIndicator.classList.toggle('hidden', !this.game.isCutMode);
             }
 
             showMessage(message, type = 'error') {
@@ -2371,3 +2455,4 @@
     </script>
 </body>
 </html>
+�

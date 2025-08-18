@@ -145,6 +145,7 @@
             <div class="flex flex-col sm:flex-row gap-2">
                 <div id="time-hud" class="hud-item"><span>🕒</span> <span id="time-display">오전 06:00</span></div>
                 <div id="day-hud" class="hud-item"><span>🗓️</span> <span id="day-display">Day 1</span></div>
+                <div id="merchant-hud" class="hud-item hidden"><span>👳</span> <span id="merchant-display"></span></div>
                 <button id="manual-open-button" class="hud-item font-bold text-lg w-10 h-10 flex items-center justify-center p-0">?</button>
             </div>
             <div class="flex flex-col sm:flex-row gap-2 items-end flex-wrap justify-end">
@@ -229,7 +230,7 @@
                 <ul>
                     <li><strong>이름 변경:</strong> 양의 이름을 자유롭게 바꿀 수 있습니다.</li>
                     <li><strong>털 깎기:</strong> 성인 양의 털을 깎아 양털 1개를 얻습니다. 털을 깎은 양은 5일 동안 털을 깎을 수 없습니다.</li>
-                    <li><strong>판매:</strong> 양을 시장 가격으로 즉시 판매합니다. (성인 양: 5골드, 새끼 양: 2골드)</li>
+                    <li><strong>판매:</strong> 상인 근처로 양을 데려가면 양을 시장 가격으로 판매할 수 있습니다. (성인 양: 5골드, 새끼 양: 2골드)</li>
                     <li><strong>도축:</strong> 양을 도축하여 식량을 얻습니다. (성인 양: 식량 3, 새끼 양: 식량 1)</li>
                 </ul>
                 <h3>개 관리</h3>
@@ -244,10 +245,12 @@
                     <li><strong>설치:</strong> 건설 모드에서 설치하고 싶은 타일을 클릭하면 울타리가 설치되며, 보유한 울타리 개수가 1 줄어듭니다.</li>
                     <li><strong>철거:</strong> 건설 모드에서 이미 설치된 울타리를 클릭하면 철거되며, 울타리를 다시 회수합니다.</li>
                 </ul>
-                <h3>시장</h3>
+                <h3>상인과 시장</h3>
                 <ul>
-                    <li>양치기가 목장 안에 있을 때 '시장' 버튼이 활성화됩니다.</li>
-                    <li>양, 개, 건초, 식량, 울타리 등 다양한 물품을 사거나 팔 수 있습니다.</li>
+                    <li>게임 시작 첫날부터 상인이 모닥불 근처에 나타납니다.</li>
+                    <li>상인은 2일간 머물고 5일간 사라지는 주기를 반복합니다. 상단의 상인 아이콘으로 남은 기간을 확인할 수 있습니다.</li>
+                    <li>양치기가 상인 근처로 가면 '시장' 버튼이 활성화됩니다.</li>
+                    <li>시장에서 양, 개, 건초, 식량, 울타리 등 다양한 물품을 사거나 팔 수 있습니다.</li>
                 </ul>
                 <h3>모닥불</h3>
                 <ul>
@@ -397,6 +400,7 @@
                 this.ctx = canvas.getContext('2d');
                 this.entities = [];
                 this.leaderSheep = null;
+                this.merchant = null; // 상인 인스턴스
                 this.gameState = {
                     time: 6 * 60,
                     day: 1,
@@ -409,6 +413,8 @@
                     isNight: false,
                     gameOver: false,
                     paused: false,
+                    merchantState: 'present', // 'present', 'absent'
+                    merchantTimer: 2, // 남은 기간
                 };
                 this.world = {
                     width: 2000,
@@ -524,6 +530,10 @@
                 for (let i = 0; i < 5; i++) {
                     this.entities.push(new Sheep(this, this.world.pasture.x + 100 + Math.random() * 200, this.world.pasture.y + 100 + Math.random() * 200, true));
                 }
+                
+                // 상인 생성
+                this.spawnMerchant();
+
                 this.gameLoop(0);
             }
 
@@ -775,6 +785,8 @@
                 if (this._lastStartedDay === this.gameState.day) return;
                 this._lastStartedDay = this.gameState.day;
 
+                this.updateMerchantCycle(); // 상인 주기 업데이트
+
                 this.entities = this.entities.filter(e => !(e instanceof Wolf));
                 this.world.pasture.gate.isOpen = true;
                 this.logMessage(`새로운 날이 밝았습니다. Day ${this.gameState.day}`);
@@ -802,6 +814,44 @@
                 
                 this.handleBreedingAndGrowth();
             }
+
+            updateMerchantCycle() {
+                this.gameState.merchantTimer--;
+                if (this.gameState.merchantTimer <= 0) {
+                    if (this.gameState.merchantState === 'present') {
+                        this.gameState.merchantState = 'absent';
+                        this.gameState.merchantTimer = 5; // 5일간 사라짐
+                        this.despawnMerchant();
+                        this.logMessage('상인이 마을을 떠났습니다.');
+                    } else {
+                        this.gameState.merchantState = 'present';
+                        this.gameState.merchantTimer = 2; // 2일간 머뭄
+                        this.spawnMerchant();
+                        this.logMessage('상인이 마을에 도착했습니다.');
+                    }
+                }
+            }
+
+            spawnMerchant() {
+                if (this.merchant) return;
+                const cf = this.world.campfire;
+                // 모닥불 안전 구역 내 랜덤 위치
+                const angle = Math.random() * Math.PI * 2;
+                const radius = cf.radius + Math.random() * (cf.safeRadius - cf.radius - 20);
+                const x = cf.x + Math.cos(angle) * radius;
+                const y = cf.y + Math.sin(angle) * radius;
+                
+                this.merchant = new Merchant(this, x, y);
+                this.entities.push(this.merchant);
+            }
+
+            despawnMerchant() {
+                if (this.merchant) {
+                    this.merchant.isDead = true;
+                    this.merchant = null;
+                }
+            }
+
 
             endOfDay() {
                 if (this._lastEndedDay === this.gameState.day) return;
@@ -1111,6 +1161,37 @@
                     this.applyMovement(dx, dy);
                 }
                 super.update(deltaTime);
+            }
+        }
+
+        // --- 상인 클래스 ---
+        class Merchant extends Character {
+            constructor(game, x, y) {
+                super(game, x, y, 18, '#8e44ad'); // 보라색
+                this.name = '상인';
+                this.speed = 1.5;
+                this.hp = Infinity; // 죽지 않음
+                this.maxHp = Infinity;
+                this.hunger = Infinity;
+            }
+
+            update(deltaTime) {
+                // 모닥불 안전 구역 밖으로 밀려나면 돌아옴
+                if (!this.game.isInsideCampfireZone(this)) {
+                    this.moveTowards(this.game.world.campfire, this.speed);
+                }
+                // 늑대나 다른 것에 반응하지 않음
+                // 충돌 해결은 Character.update에서 처리
+                super.update(deltaTime);
+            }
+
+            draw(ctx) {
+                super.draw(ctx);
+                // 상인임을 나타내는 아이콘
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.font = '18px sans-serif';
+                ctx.fillText('💰', this.x, this.y + 6);
             }
         }
         
@@ -1686,6 +1767,8 @@
                 this.manualOpenButton = document.getElementById('manual-open-button');
                 this.manualModal = document.getElementById('manual-modal');
                 this.closeManualButton = document.getElementById('close-manual-button');
+                this.merchantHud = document.getElementById('merchant-hud');
+                this.merchantDisplay = document.getElementById('merchant-display');
 
                 this.confirmModal = document.getElementById('confirm-modal');
                 this.confirmMessage = document.getElementById('confirm-message');
@@ -1791,13 +1874,25 @@
                 this.woolDisplay.textContent = this.game.gameState.wool;
                 this.fenceDisplay.textContent = this.game.gameState.fences;
 
+                // 상인 HUD 업데이트
+                if (this.game.gameState.merchantState === 'present') {
+                    this.merchantHud.classList.remove('hidden');
+                    this.merchantDisplay.textContent = `떠나기까지 ${this.game.gameState.merchantTimer}일`;
+                } else {
+                    this.merchantHud.classList.remove('hidden');
+                    this.merchantDisplay.textContent = `오기까지 ${this.game.gameState.merchantTimer}일`;
+                }
+
                 const distToGate = utils.distance(this.game.shepherd, {x: this.game.world.pasture.gate.x + 40, y: this.game.world.pasture.gate.y + 10});
                 this.gateButton.classList.toggle('hidden', !(distToGate < 100));
                 this.gateButton.innerHTML = this.game.world.pasture.gate.isOpen ? '🚪 문 닫기' : '🚪 문 열기';
                 
-                const inPasture = this.game.isInsidePasture(this.game.shepherd);
-                this.marketButton.classList.toggle('hidden', !inPasture);
+                // 시장 버튼 활성화 조건 변경
+                const merchant = this.game.merchant;
+                const canOpenMarket = merchant && !merchant.isDead && utils.distance(this.game.shepherd, merchant) < 100;
+                this.marketButton.classList.toggle('hidden', !canOpenMarket);
 
+                const inPasture = this.game.isInsidePasture(this.game.shepherd);
                 const distToHaystack = utils.distance(this.game.shepherd, this.game.world.pasture.haystack);
                 const distToTrough = utils.distance(this.game.shepherd, {x: this.game.world.pasture.trough.x + 50, y: this.game.world.pasture.trough.y + 10});
                 const canAddToTrough = inPasture && distToHaystack < 80;
@@ -1886,9 +1981,13 @@
                         else if (name === '울타리') maxQty = Math.floor(this.game.gameState.gold / 1);
                         maxQty = Math.max(0, maxQty);
                     } else {
-                        if (name === '새끼 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
-                        else if (name === '어른 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
-                        else if (name === '늑대 가죽') maxQty = this.game.gameState.wolfSkin;
+                        // 판매 가능 수량은 상인 근처에 있는 양만 카운트
+                        const merchant = this.game.merchant;
+                        if (merchant) {
+                            if (name === '새끼 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isAdult && utils.distance(e, merchant) < 100).length;
+                            else if (name === '어른 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && e.isAdult && utils.distance(e, merchant) < 100).length;
+                        }
+                        if (name === '늑대 가죽') maxQty = this.game.gameState.wolfSkin;
                         else if (name === '양털') maxQty = this.game.gameState.wool;
                     }
 
@@ -1923,8 +2022,8 @@
                 buySection.innerHTML += createItemHTML('식량', 1, foodCount, 'buy');
                 buySection.innerHTML += createItemHTML('울타리', 1, fenceCount, 'buy');
                 
-                const sellableYoungSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult && this.game.isInsidePasture(e)).length;
-                const sellableAdultSheep = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult && this.game.isInsidePasture(e)).length;
+                const sellableYoungSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult).length;
+                const sellableAdultSheep = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult).length;
 
                 sellSection.innerHTML += createItemHTML('새끼 양', 2, sellableYoungSheep, 'sell');
                 sellSection.innerHTML += createItemHTML('어른 양', 5, sellableAdultSheep, 'sell');
@@ -2037,9 +2136,14 @@
                         });
                     };
 
-                    sellBtn.disabled = !this.game.isInsidePasture(sheep);
+                    // 판매 버튼 활성화 조건 변경
+                    const merchant = this.game.merchant;
+                    const canSell = merchant && !merchant.isDead && utils.distance(sheep, merchant) < 100 && utils.distance(this.game.shepherd, merchant) < 100;
+                    sellBtn.disabled = !canSell;
+                    sellBtn.title = canSell ? '' : '상인에게 양과 함께 가까이 가야 판매할 수 있습니다.';
+
                     sellBtn.onclick = () => {
-                        if (!this.game.isInsidePasture(sheep)) return;
+                        if (!canSell) return;
                         const price = sheep.isAdult ? 5 : 2;
                         const message = `${sheep.name}을(를) ${price}골드에 판매하시겠습니까?`;
 
@@ -2156,7 +2260,13 @@
                 
                 if (item === '새끼_양' || item === '어른_양') {
                     const isAdult = item === '어른_양';
-                    const sheepToSell = this.game.entities.filter(e => e instanceof Sheep && e.isAdult === isAdult && this.game.isInsidePasture(e));
+                    const merchant = this.game.merchant;
+                    if (!merchant) {
+                        this.game.ui.showMessage(`상인이 없어 판매할 수 없습니다.`, 'error'); 
+                        return;
+                    }
+
+                    const sheepToSell = this.game.entities.filter(e => e instanceof Sheep && e.isAdult === isAdult && utils.distance(e, merchant) < 100);
                     if (sheepToSell.length >= qty) {
                         for(let i=0; i<qty; i++) {
                             sheepToSell[i].isDead = true;
@@ -2168,7 +2278,7 @@
                         this.game.logMessage(`${qty} ${item.replace('_', ' ')}을(를) 판매했습니다. (총 골드: ${this.game.gameState.gold})`);
                         this.game.ui.setupMarketModal();
                     } else { 
-                        this.game.ui.showMessage(`목장 안에 판매할 ${isAdult ? '어른 양' : '새끼 양'}이 부족합니다.`, 'error'); 
+                        this.game.ui.showMessage(`상인 근처에 판매할 ${isAdult ? '어른 양' : '새끼 양'}이 부족합니다.`, 'error'); 
                     }
                 } else if (item === '늑대_가죽') {
                     if (this.game.gameState.wolfSkin >= qty) {

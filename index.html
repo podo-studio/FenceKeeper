@@ -249,6 +249,13 @@
                     <li>양치기가 목장 안에 있을 때 '시장' 버튼이 활성화됩니다.</li>
                     <li>양, 개, 건초, 식량, 울타리 등 다양한 물품을 사거나 팔 수 있습니다.</li>
                 </ul>
+                <h3>모닥불</h3>
+                <ul>
+                    <li>울타리 밖에 모닥불이 있습니다. 밤이 되면 모닥불에 불이 켜지고 주변에 노란색 안전 구역이 표시됩니다.</li>
+                    <li>늑대는 모닥불 안전 구역 안으로 들어올 수 없으며, 구역 안에 있는 양, 개, 양치기를 공격 목표로 삼지 않습니다.</li>
+                    <li>늑대에게 쫓기더라도 안전 구역으로 들어가면 늑대는 추격을 포기합니다.</li>
+                </ul>
+
 
                 <h2>5. 게임 오버</h2>
                 <p>양치기의 체력(HP)이 0이 되면 게임은 종료됩니다. 굶주리거나 늑대의 공격을 받으면 체력이 감소하니 항상 주의해야 합니다.</p>
@@ -418,6 +425,7 @@
                         },
                         haystack: { x: 1150, y: 880, radius: 30 }
                     },
+                    campfire: { x: 600, y: 750, radius: 30, safeRadius: 150 },
                     grassPatches: [],
                     fences: new Set(), // 설치된 울타리 위치
                 };
@@ -439,6 +447,7 @@
                     { x: noGrassZone.x + noGrassZone.width, y: noGrassZone.y, width: this.world.width - (noGrassZone.x + noGrassZone.width), height: noGrassZone.height }
                 ]);
 
+                this.removeGrassAroundCampfire(); // 모닥불 주변 풀 제거
                 this.initializeTroughTiles();
                 this.world.pasture.trough.hayAmount = this.calculateTroughHayAmount();
 
@@ -453,6 +462,27 @@
                 this.logDisplay = document.getElementById('game-log');
                 this._lastStartedDay = 0;
                 this._lastEndedDay = 0;
+            }
+
+            removeGrassAroundCampfire() {
+                const cf = this.world.campfire;
+                const removalRadius = cf.radius + (3 * config.GRASS_TILE_SIZE); // 모닥불 돌 반경 + 3칸
+
+                this.world.grassPatches.forEach(patch => {
+                    for (let r = 0; r < patch.tiles.length; r++) {
+                        for (let c = 0; c < patch.tiles[r].length; c++) {
+                            const tile = patch.tiles[r][c];
+                            const tileCenter = {
+                                x: patch.x + (c + 0.5) * config.GRASS_TILE_SIZE,
+                                y: patch.y + (r + 0.5) * config.GRASS_TILE_SIZE
+                            };
+
+                            if (utils.distance(tileCenter, cf) < removalRadius) {
+                                tile.richness = 0;
+                            }
+                        }
+                    }
+                });
             }
 
             initializeGrassPatches(patches) {
@@ -614,6 +644,37 @@
                     this.ctx.fillRect(x, y, fenceSize, fenceSize);
                     this.ctx.strokeRect(x, y, fenceSize, fenceSize);
                 }
+
+                // --- 모닥불 그리기 ---
+                const cf = this.world.campfire;
+                
+                // 모닥불 돌 (항상 보임)
+                this.ctx.fillStyle = '#6b7280'; // gray-500
+                this.ctx.beginPath();
+                this.ctx.arc(cf.x, cf.y, cf.radius, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#4b5563'; // gray-600
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                // 밤에만 불꽃과 안전 구역 표시
+                if (this.gameState.isNight) {
+                    // 안전 구역
+                    this.ctx.fillStyle = 'rgba(255, 220, 150, 0.2)';
+                    this.ctx.beginPath();
+                    this.ctx.arc(cf.x, cf.y, cf.safeRadius, 0, Math.PI * 2);
+                    this.ctx.fill();
+
+                    // 불꽃 (간단한 애니메이션 효과)
+                    const flameSize = cf.radius * 0.8;
+                    const flameColor = Math.random() < 0.5 ? 'orange' : 'yellow';
+                    this.ctx.fillStyle = flameColor;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(cf.x - flameSize / 2, cf.y + flameSize / 2);
+                    this.ctx.quadraticCurveTo(cf.x, cf.y, cf.x, cf.y - flameSize * (1.5 + Math.random() * 0.5));
+                    this.ctx.quadraticCurveTo(cf.x, cf.y, cf.x + flameSize / 2, cf.y + flameSize / 2);
+                    this.ctx.fill();
+                }
             }
 
             drawBuildPreview() {
@@ -677,6 +738,17 @@
                 if (distToHaystack < haystack.radius + fenceSize / 2) {
                     return false;
                 }
+                
+                // Campfire
+                const cf = this.world.campfire;
+                const distToCampfire = utils.distance(
+                    { x: fenceBox.left + fenceSize / 2, y: fenceBox.top + fenceSize / 2 },
+                    cf
+                );
+                if (distToCampfire < cf.safeRadius + fenceSize / 2) {
+                    return false;
+                }
+
 
                 return true;
             }
@@ -838,6 +910,12 @@
             isInsidePasture(entity) {
                 const p = this.world.pasture;
                 return entity.x > p.x && entity.x < p.x + p.width && entity.y > p.y && entity.y < p.y + p.height;
+            }
+
+            // --- 모닥불 존 확인 함수 ---
+            isInsideCampfireZone(entity) {
+                if (!this.world.campfire) return false;
+                return utils.distance(entity, this.world.campfire) < this.world.campfire.safeRadius;
             }
 
             logMessage(message) {
@@ -1383,7 +1461,8 @@
             findClosest(type, range) {
                 let closest = null, min_dist = range;
                 this.game.entities.forEach(e => {
-                    if (e instanceof type && !e.isDead) { const d = utils.distance(this, e);
+                    if (e instanceof type && !e.isDead && !this.game.isInsideCampfireZone(e)) { 
+                        const d = utils.distance(this, e);
                         if (d < min_dist) { min_dist = d; closest = e; }
                     }
                 });
@@ -1402,6 +1481,11 @@
             }
             update(deltaTime) {
                 if (this.isDead) return;
+
+                // --- 모닥불 로직: 타겟이 안전 구역에 들어가면 추격 포기 ---
+                if (this.target && this.game.isInsideCampfireZone(this.target)) {
+                    this.target = null;
+                }
 
                 if (this.hp <= 0 && !this._skinDropped) {
                     this.game.gameState.wolfSkin++;
@@ -1435,10 +1519,28 @@
                         }
                     }
                 }
+
+                // --- 모닥불 로직: 안전 구역 진입 방지 ---
+                if (this.game.isInsideCampfireZone(this)) {
+                    const cf = this.game.world.campfire;
+                    const dist = utils.distance(this, cf);
+                    if (dist < cf.safeRadius) {
+                        const overlap = cf.safeRadius - dist;
+                        const angle = Math.atan2(this.y - cf.y, this.x - cf.x);
+                        this.x += Math.cos(angle) * (overlap + 1); // 약간 더 밀어내서 확실히 밖으로 보냄
+                        this.y += Math.sin(angle) * (overlap + 1);
+                    }
+                }
+
                 super.update(deltaTime);
             }
             findTarget() {
-                let potentialTargets = this.game.entities.filter(e => (e instanceof Sheep || e instanceof Dog || e instanceof Shepherd) && !e.isDead);
+                // --- 모닥불 로직: 안전 구역에 있는 대상은 제외 ---
+                let potentialTargets = this.game.entities.filter(e => 
+                    (e instanceof Sheep || e instanceof Dog || e instanceof Shepherd) && 
+                    !e.isDead &&
+                    !this.game.isInsideCampfireZone(e)
+                );
                 potentialTargets.sort((a,b) => utils.distance(this, a) - utils.distance(this, b));
                 return potentialTargets[0] || null;
             }

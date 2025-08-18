@@ -1867,7 +1867,7 @@
                 this.timeDisplay.textContent = `${period} ${String(displayHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
                 this.dayDisplay.textContent = `Day ${this.game.gameState.day}`; 
                 this.goldDisplay.textContent = this.game.gameState.gold;
-                this.sheepDisplay.textContent = this.game.entities.filter(e => e instanceof Sheep).length;
+                this.sheepDisplay.textContent = this.game.entities.filter(e => e instanceof Sheep && !e.isDead).length;
                 this.hayDisplay.textContent = this.game.gameState.hayStock;
                 this.foodDisplay.textContent = this.game.gameState.food;
                 this.wolfSkinDisplay.textContent = this.game.gameState.wolfSkin;
@@ -1923,7 +1923,7 @@
             }
 
             updateDogUI() {
-                const dogs = this.game.entities.filter(e => e instanceof Dog).sort((a, b) => a.id - b.id);
+                const dogs = this.game.entities.filter(e => e instanceof Dog && !e.isDead).sort((a, b) => a.id - b.id);
                 
                 this.dogCommandAllButton.classList.toggle('hidden', dogs.length === 0);
                 
@@ -1973,7 +1973,7 @@
                         if (name === '새끼 양') maxQty = Math.floor(this.game.gameState.gold / 5);
                         else if (name === '어른 양') maxQty = Math.floor(this.game.gameState.gold / 10);
                         else if (name === '개') {
-                            const currentDogCount = this.game.entities.filter(e => e instanceof Dog).length;
+                            const currentDogCount = this.game.entities.filter(e => e instanceof Dog && !e.isDead).length;
                             maxQty = Math.min(Math.floor(this.game.gameState.gold / 50), 3 - currentDogCount);
                         }
                         else if (name === '건초') maxQty = Math.floor(this.game.gameState.gold / 1);
@@ -1984,8 +1984,8 @@
                         // 판매 가능 수량은 상인 근처에 있는 양만 카운트
                         const merchant = this.game.merchant;
                         if (merchant) {
-                            if (name === '새끼 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isAdult && utils.distance(e, merchant) < 100).length;
-                            else if (name === '어른 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && e.isAdult && utils.distance(e, merchant) < 100).length;
+                            if (name === '새끼 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isDead && !e.isAdult && utils.distance(e, merchant) < 100).length;
+                            else if (name === '어른 양') maxQty = this.game.entities.filter(e => e instanceof Sheep && !e.isDead && e.isAdult && utils.distance(e, merchant) < 100).length;
                         }
                         if (name === '늑대 가죽') maxQty = this.game.gameState.wolfSkin;
                         else if (name === '양털') maxQty = this.game.gameState.wool;
@@ -2006,9 +2006,9 @@
                         </div>`;
                 };
 
-                const youngSheepCount = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult).length;
-                const adultSheepCount = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult).length;
-                const dogCount = this.game.entities.filter(e=>e instanceof Dog).length;
+                const youngSheepCount = this.game.entities.filter(e=>e instanceof Sheep && !e.isDead && !e.isAdult).length;
+                const adultSheepCount = this.game.entities.filter(e=>e instanceof Sheep && !e.isDead && e.isAdult).length;
+                const dogCount = this.game.entities.filter(e=>e instanceof Dog && !e.isDead).length;
                 const hayStockCount = this.game.gameState.hayStock;
                 const foodCount = this.game.gameState.food;
                 const wolfSkinCount = this.game.gameState.wolfSkin;
@@ -2022,8 +2022,8 @@
                 buySection.innerHTML += createItemHTML('식량', 1, foodCount, 'buy');
                 buySection.innerHTML += createItemHTML('울타리', 1, fenceCount, 'buy');
                 
-                const sellableYoungSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isAdult).length;
-                const sellableAdultSheep = this.game.entities.filter(e=>e instanceof Sheep && e.isAdult).length;
+                const sellableYoungSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isDead && !e.isAdult).length;
+                const sellableAdultSheep = this.game.entities.filter(e=>e instanceof Sheep && !e.isDead && e.isAdult).length;
 
                 sellSection.innerHTML += createItemHTML('새끼 양', 2, sellableYoungSheep, 'sell');
                 sellSection.innerHTML += createItemHTML('어른 양', 5, sellableAdultSheep, 'sell');
@@ -2228,7 +2228,7 @@
                 const costs = { '새끼_양': 5, '어른_양': 10, '개': 50, '건초': 1, '식량': 1, '울타리': 1 };
                 const totalCost = costs[item] * qty;
                 if (this.game.gameState.gold >= totalCost) {
-                    if (item === '개' && this.game.entities.filter(e => e instanceof Dog).length + qty > 3) { 
+                    if (item === '개' && this.game.entities.filter(e => e instanceof Dog && !e.isDead).length + qty > 3) { 
                         this.game.ui.showMessage("개는 최대 3마리까지 보유할 수 있습니다.", 'error'); 
                         return; 
                     }
@@ -2266,7 +2266,7 @@
                         return;
                     }
 
-                    const sheepToSell = this.game.entities.filter(e => e instanceof Sheep && e.isAdult === isAdult && utils.distance(e, merchant) < 100);
+                    const sheepToSell = this.game.entities.filter(e => e instanceof Sheep && !e.isDead && e.isAdult === isAdult && utils.distance(e, merchant) < 100);
                     if (sheepToSell.length >= qty) {
                         for(let i=0; i<qty; i++) {
                             sheepToSell[i].isDead = true;

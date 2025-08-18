@@ -475,20 +475,37 @@
                 this.isCutMode = false; // 풀베기 모드 상태
                 this.mouseGridPos = { x: 0, y: 0 };
 
-                const p = this.world.pasture;
-                const margin = 10 * config.GRASS_TILE_SIZE;
-                const noGrassZone = {
-                    x: p.x - margin,
-                    y: p.y - margin,
-                    width: p.width + margin * 2,
-                    height: p.height + margin * 2
+                // --- Grass Patch Initialization (FIXED) ---
+                const tileSize = config.GRASS_TILE_SIZE;
+                const pastureGrid = {
+                    left: Math.floor(this.world.pasture.x / tileSize),
+                    top: Math.floor(this.world.pasture.y / tileSize),
+                    right: Math.ceil((this.world.pasture.x + this.world.pasture.width) / tileSize),
+                    bottom: Math.ceil((this.world.pasture.y + this.world.pasture.height) / tileSize)
                 };
+                const marginGrid = 10;
+
+                const noGrassZoneGrid = {
+                    left: pastureGrid.left - marginGrid,
+                    top: pastureGrid.top - marginGrid,
+                    right: pastureGrid.right + marginGrid,
+                    bottom: pastureGrid.bottom + marginGrid
+                };
+
+                const noGrassZone = {
+                    x: noGrassZoneGrid.left * tileSize,
+                    y: noGrassZoneGrid.top * tileSize,
+                    width: (noGrassZoneGrid.right - noGrassZoneGrid.left) * tileSize,
+                    height: (noGrassZoneGrid.bottom - noGrassZoneGrid.top) * tileSize
+                };
+
                 this.initializeGrassPatches([
                     { x: 0, y: 0, width: this.world.width, height: noGrassZone.y },
                     { x: 0, y: noGrassZone.y + noGrassZone.height, width: this.world.width, height: this.world.height - (noGrassZone.y + noGrassZone.height) },
                     { x: 0, y: noGrassZone.y, width: noGrassZone.x, height: noGrassZone.height },
                     { x: noGrassZone.x + noGrassZone.width, y: noGrassZone.y, width: this.world.width - (noGrassZone.x + noGrassZone.width), height: noGrassZone.height }
                 ]);
+
 
                 this.removeGrassAroundCampfire(); // 모닥불 주변 풀 제거
                 this.initializeTroughTiles();
@@ -1395,7 +1412,7 @@
                                 this.hunger = Math.min(100, this.hunger + 30);
                                 currentFoodSource.tileObject.richness--;
                                 this.game.world.pasture.trough.hayAmount = this.game.calculateTroughHayAmount();
-                                this.game.logMessage(`${this.name}이(가) 건초를 먹어 배부름이 30 올랐습니다.`);
+                                this.game.logMessage(`${this.name}이(가) 건초을(를) 먹어 배부름이 30 올랐습니다.`);
                             }
                             this.eatingTimer = config.GRASS_EATING_DELAY;
                         }

@@ -249,8 +249,9 @@
                 <h3>개 관리</h3>
                 <ul>
                     <li><strong>정보 확인:</strong> 개를 직접 클릭하면 정보 창이 열려 이름을 바꾸거나 밥을 줄 수 있습니다.</li>
+                    <li><strong>태세 변경:</strong> 개 정보 창에서 '경계' 또는 '평화' 태세를 설정할 수 있습니다. '경계' 모드에서는 늑대를 보면 자동으로 공격하지만, '평화' 모드에서는 늑대를 무시하고 명령을 따릅니다.</li>
                     <li><strong>개별 명령:</strong> 화면 하단의 개 아이콘을 클릭하여 '따라와' 또는 '기다려' 명령을 내릴 수 있습니다.</li>
-                    <li><strong>전체 명령:</strong> '전체 명령' 버튼으로 모든 개에게 동일한 명령을 내릴 수 있습니다. 개는 주변의 늑대를 자동으로 공격합니다.</li>
+                    <li><strong>전체 명령:</strong> '전체 명령' 버튼으로 모든 개에게 동일한 명령을 내릴 수 있습니다.</li>
                 </ul>
                 <h3>풀 베기</h3>
                 <ul>
@@ -357,6 +358,13 @@
                 <div>
                     <label for="dog-name-input" class="block text-sm font-medium text-gray-700">이름</label>
                     <input id="dog-name-input" type="text" class="w-full p-2 border rounded-md mt-1">
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-700">태세</p>
+                    <div id="dog-stance-info" class="grid grid-cols-2 gap-2 mt-1">
+                        <button id="dog-stance-guard" class="w-full p-2 rounded-md">경계</button>
+                        <button id="dog-stance-peace" class="w-full p-2 rounded-md">평화</button>
+                    </div>
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-700">배부름</p>
@@ -1617,24 +1625,32 @@
             constructor(game, x, y) {
                 super(game, x, y, 13, '#a0522d'); 
                 this.speed = config.DOG_SPEED; 
-                this.command = 'follow';
+                this.command = 'follow'; // 'follow' or 'stay'
+                this.stance = 'Guard'; // 'Guard' or 'Peace'
                 this.maxHp = 150; 
                 this.hp = 150;
                 this.name = `개 #${Math.floor(Math.random() * 1000)}`;
                 this.id = ++game.idCounters.dog;
             }
             update(deltaTime) {
-                const wolf = this.findClosest(Wolf, 200);
-                if (wolf) {
-                    this.target = wolf; this.moveTowards(this.target, this.speed);
-                    if (utils.distance(this, this.target) < this.radius + this.target.radius) {
-                        wolf.hp -= 0.5;
-                        if (wolf.hp <= 0 && !wolf.isDead && !wolf.deathLogged) {
-                            this.game.logMessage(`${this.name}이(가) 늑대 ${wolf.name || ''}를 처치했습니다.`);
-                            wolf.deathLogged = true;
+                let isAttacking = false;
+                if (this.stance === 'Guard') {
+                    const wolf = this.findClosest(Wolf, 200);
+                    if (wolf) {
+                        isAttacking = true;
+                        this.target = wolf;
+                        this.moveTowards(this.target, this.speed);
+                        if (utils.distance(this, this.target) < this.radius + this.target.radius) {
+                            wolf.hp -= 0.5;
+                            if (wolf.hp <= 0 && !wolf.isDead && !wolf.deathLogged) {
+                                this.game.logMessage(`${this.name}이(가) 늑대 ${wolf.name || ''}를 처치했습니다.`);
+                                wolf.deathLogged = true;
+                            }
                         }
                     }
-                } else {
+                }
+
+                if (!isAttacking) {
                     if (this.command === 'follow' && utils.distance(this, this.game.shepherd) > 50) {
                         this.moveTowards(this.game.shepherd, this.speed);
                     }
@@ -2077,7 +2093,7 @@
                 
                 this.dogCommandAllButton.classList.toggle('hidden', dogs.length === 0);
                 
-                const currentDogInfo = dogs.map(d => `${d.id}:${d.command}:${d.name}`).join('|');
+                const currentDogInfo = dogs.map(d => `${d.id}:${d.command}:${d.stance}:${d.name}`).join('|');
                 const newSnapshot = `${dogs.length}|${currentDogInfo}`;
 
                 if (this._dogStatusSnapshot === newSnapshot) return;
@@ -2093,8 +2109,10 @@
 
                     if (dog) {
                         dogDiv.dataset.dogId = String(dog.id);
-                        const label = (dog.command === 'follow') ? '따라와' : '기다려';
-                        dogDiv.innerHTML = `<span class="block text-center">🐶 ${dog.name}</span> <span class="block text-xs text-center">${label}</span>`;
+                        const commandText = (dog.command === 'follow') ? '따라와' : '기다려';
+                        const stanceText = (dog.stance === 'Guard') ? '경계' : '평화';
+                        const stanceColor = (dog.stance === 'Guard') ? 'text-red-300' : 'text-green-300';
+                        dogDiv.innerHTML = `<span class="block text-center">🐶 ${dog.name}</span> <span class="block text-xs text-center">${commandText} / <span class="${stanceColor}">${stanceText}</span></span>`;
                         dogDiv.classList.add('cursor-pointer');
                     } else {
                         dogDiv.classList.remove('cursor-pointer');
@@ -2316,10 +2334,40 @@
                     const hungerInfo = document.getElementById('dog-hunger-info');
                     const feedButton = document.getElementById('dog-feed-button');
                     const confirmBtn = document.getElementById('dog-info-confirm');
+                    const guardBtn = document.getElementById('dog-stance-guard');
+                    const peaceBtn = document.getElementById('dog-stance-peace');
                     
                     nameInput.value = dog.name;
                     hungerInfo.textContent = `${Math.ceil(dog.hunger)} / ${dog.maxHunger}`;
                     
+                    const updateStanceButtons = () => {
+                        if (dog.stance === 'Guard') {
+                            guardBtn.classList.add('bg-red-500', 'text-white');
+                            guardBtn.classList.remove('bg-gray-200');
+                            peaceBtn.classList.add('bg-gray-200');
+                            peaceBtn.classList.remove('bg-green-500', 'text-white');
+                        } else { // Peace
+                            peaceBtn.classList.add('bg-green-500', 'text-white');
+                            peaceBtn.classList.remove('bg-gray-200');
+                            guardBtn.classList.add('bg-gray-200');
+                            guardBtn.classList.remove('bg-red-500', 'text-white');
+                        }
+                    };
+
+                    updateStanceButtons();
+
+                    guardBtn.onclick = () => {
+                        dog.stance = 'Guard';
+                        this.game.logMessage(`${dog.name}의 태세를 '경계'로 변경했습니다.`);
+                        updateStanceButtons();
+                    };
+
+                    peaceBtn.onclick = () => {
+                        dog.stance = 'Peace';
+                        this.game.logMessage(`${dog.name}의 태세를 '평화'로 변경했습니다.`);
+                        updateStanceButtons();
+                    };
+
                     feedButton.onclick = () => {
                         dog.feed();
                         hungerInfo.textContent = `${Math.ceil(dog.hunger)} / ${dog.maxHunger}`;

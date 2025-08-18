@@ -18,10 +18,10 @@
             background-color: #111827; /* bg-gray-900 */
         }
         canvas {
-            background-color: #6aa84f; /* 낮 배경색 */
             cursor: pointer;
             display: block;
             border-radius: 0.5rem;
+            transition: background-color 1s ease-in-out;
         }
         .hud-item {
             background-color: rgba(0, 0, 0, 0.5);
@@ -145,6 +145,7 @@
             <div class="flex flex-col sm:flex-row gap-2">
                 <div id="time-hud" class="hud-item"><span>🕒</span> <span id="time-display">오전 06:00</span></div>
                 <div id="day-hud" class="hud-item"><span>🗓️</span> <span id="day-display">Day 1</span></div>
+                <div id="season-hud" class="hud-item"><span></span> <span id="season-display"></span></div>
                 <div id="merchant-hud" class="hud-item hidden"><span>👳</span> <span id="merchant-display"></span></div>
                 <button id="manual-open-button" class="hud-item font-bold text-lg w-10 h-10 flex items-center justify-center p-0">?</button>
             </div>
@@ -211,6 +212,14 @@
                 </ul>
 
                 <h2>3. 게임 시스템</h2>
+                <h3>계절</h3>
+                <ul>
+                    <li>게임은 10일마다 계절이 바뀝니다. (봄 → 여름 → 가을 → 겨울 → 봄)</li>
+                    <li><strong>봄:</strong> 모든 풀이 다시 자라나기 시작합니다.</li>
+                    <li><strong>여름:</strong> 풀이 왕성하게 자랍니다.</li>
+                    <li><strong>가을:</strong> 풀이 더 이상 자라지 않습니다.</li>
+                    <li><strong>겨울:</strong> 모든 풀이 사라지고, 자라지 않습니다. 양들을 위해 건초를 비축해야 합니다.</li>
+                </ul>
                 <h3>시간과 하루</h3>
                 <ul>
                     <li>게임 속 시간은 자동으로 흐르며, 화면 상단의 시계로 확인할 수 있습니다.</li>
@@ -221,7 +230,7 @@
                 <ul>
                     <li><strong>💰 골드:</strong> 시장에서 아이템을 사거나 팔 때 사용하는 기본 화폐입니다.</li>
                     <li><strong>🐑 양:</strong> 가장 중요한 자원입니다. 판매하거나, 털을 깎거나, 도축하여 식량을 얻을 수 있습니다.</li>
-                    <li><strong>� 건초:</strong> 양들의 사료입니다. 시장에서 구매하여 목장의 먹이통에 채워줄 수 있습니다.</li>
+                    <li><strong>🌾 건초:</strong> 양들의 사료입니다. 시장에서 구매하여 목장의 먹이통에 채워줄 수 있습니다.</li>
                     <li><strong>🍖 식량:</strong> 양치기와 개의 허기를 채우는 데 사용됩니다. 양을 도축하거나 시장에서 구매할 수 있습니다.</li>
                     <li><strong>🐺 늑대 가죽:</strong> 늑대를 처치하면 얻을 수 있으며, 시장에 판매하여 골드를 얻을 수 있습니다.</li>
                     <li><strong>🧶 양털:</strong> 성인 양의 털을 깎아 얻을 수 있으며, 시장에 판매할 수 있습니다.</li>
@@ -390,6 +399,7 @@
             GRASS_TILE_SIZE: 20,
             GRASS_EATING_DELAY: 2000,
             FENCE_SIZE: 20, // 울타리 크기
+            SEASON_LENGTH: 10, // 계절 길이 (일)
         };
 
         // --- 유틸리티 함수 ---
@@ -411,6 +421,13 @@
                 this.entities = [];
                 this.leaderSheep = null;
                 this.merchant = null; // 상인 인스턴스
+                this.seasons = ['Spring', 'Summer', 'Autumn', 'Winter'];
+                this.seasonColors = {
+                    Spring: { bg: '#6aa84f', grass: '#88c070' },
+                    Summer: { bg: '#8fbc8f', grass: '#a8d098' },
+                    Autumn: { bg: '#daa520', grass: '#e0b44c' },
+                    Winter: { bg: '#f0f8ff', grass: '#ffffff' },
+                };
                 this.gameState = {
                     time: 6 * 60,
                     day: 1,
@@ -425,6 +442,7 @@
                     paused: false,
                     merchantState: 'present', // 'present', 'absent'
                     merchantTimer: 2, // 남은 기간
+                    season: 'Spring',
                 };
                 this.world = {
                     width: 2000,
@@ -580,7 +598,9 @@
             }
             
             drawBackground() {
-                this.ctx.fillStyle = this.gameState.isNight ? '#4a7c3a' : '#6aa84f';
+                const seasonColor = this.seasonColors[this.gameState.season].bg;
+                this.canvas.style.backgroundColor = seasonColor; // For the area outside the world
+                this.ctx.fillStyle = this.gameState.isNight ? '#4a7c3a' : seasonColor;
                 this.ctx.fillRect(0, 0, this.world.width, this.world.height);
                 
                 this.world.grassPatches.forEach(p => {
@@ -589,7 +609,8 @@
                             const tile = p.tiles[r][c];
                             if (tile.richness > 0) {
                                 const alpha = tile.richness / tile.maxRichness * 0.7 + 0.3;
-                                this.ctx.fillStyle = this.gameState.isNight ? `rgba(56, 102, 65, ${alpha})` : `rgba(88, 129, 87, ${alpha})`;
+                                const baseGrassColor = this.seasonColors[this.gameState.season].grass;
+                                this.ctx.fillStyle = this.gameState.isNight ? `rgba(56, 102, 65, ${alpha})` : `${baseGrassColor}${Math.floor(alpha * 255).toString(16)}`;
                                 this.ctx.fillRect(p.x + c * config.GRASS_TILE_SIZE, p.y + r * config.GRASS_TILE_SIZE, config.GRASS_TILE_SIZE, config.GRASS_TILE_SIZE);
                                 
                                 const tileX = p.x + c * config.GRASS_TILE_SIZE;
@@ -830,34 +851,70 @@
                 if (this._lastStartedDay === this.gameState.day) return;
                 this._lastStartedDay = this.gameState.day;
 
-                this.updateMerchantCycle(); // 상인 주기 업데이트
+                this.updateMerchantCycle(); 
+                this.updateSeason();
 
                 this.entities = this.entities.filter(e => !(e instanceof Wolf));
                 this.world.pasture.gate.isOpen = true;
                 this.logMessage(`새로운 날이 밝았습니다. Day ${this.gameState.day}`);
 
-                this.world.grassPatches.forEach(p => {
-                    p.tiles.forEach(row => row.forEach(tile => {
-                        if (tile.richness === 0 && tile.regrowthTimer > 0) {
-                            tile.regrowthTimer--;
-                            if (tile.regrowthTimer === 0) {
-                                tile.richness = 1;
-                            }
-                        }
-                    }));
-                });
+                const canGrassGrow = this.gameState.season === 'Spring' || this.gameState.season === 'Summer';
 
-                if (this.gameState.day % 2 === 0) {
+                if (canGrassGrow) {
+                    // Eaten grass regrowth
                     this.world.grassPatches.forEach(p => {
                         p.tiles.forEach(row => row.forEach(tile => {
-                            if (tile.richness > 0 && tile.richness < tile.maxRichness) {
-                                tile.richness++;
+                            if (tile.richness === 0 && tile.regrowthTimer > 0) {
+                                tile.regrowthTimer--;
+                                if (tile.regrowthTimer === 0) {
+                                    tile.richness = 1;
+                                }
                             }
                         }));
                     });
+
+                    // Natural grass growth
+                    if (this.gameState.day % 2 === 0) {
+                        this.world.grassPatches.forEach(p => {
+                            p.tiles.forEach(row => row.forEach(tile => {
+                                if (tile.richness > 0 && tile.richness < tile.maxRichness) {
+                                    tile.richness++;
+                                }
+                            }));
+                        });
+                    }
                 }
                 
                 this.handleBreedingAndGrowth();
+            }
+
+            updateSeason() {
+                const oldSeason = this.gameState.season;
+                const seasonIndex = Math.floor((this.gameState.day - 1) / config.SEASON_LENGTH) % this.seasons.length;
+                const newSeason = this.seasons[seasonIndex];
+
+                if (oldSeason !== newSeason) {
+                    this.gameState.season = newSeason;
+                    this.logMessage(`계절이 ${this.gameState.season}(으)로 바뀌었습니다.`);
+
+                    if (newSeason === 'Winter') {
+                        this.world.grassPatches.forEach(p => {
+                            p.tiles.forEach(row => row.forEach(tile => {
+                                tile.richness = 0;
+                            }));
+                        });
+                        this.logMessage("겨울이 되어 모든 풀이 사라졌습니다.");
+                    } else if (newSeason === 'Spring') {
+                        this.world.grassPatches.forEach(p => {
+                            p.tiles.forEach(row => row.forEach(tile => {
+                                tile.richness = 1;
+                            }));
+                        });
+                        this.logMessage("봄이 되어 풀이 다시 자라나기 시작합니다.");
+                    } else if (newSeason === 'Autumn') {
+                        this.logMessage("가을이 되어 풀이 더 이상 자라지 않습니다.");
+                    }
+                }
             }
 
             updateMerchantCycle() {
@@ -1814,6 +1871,8 @@
                 this.game = game;
                 this.timeDisplay = document.getElementById('time-display'); 
                 this.dayDisplay = document.getElementById('day-display');
+                this.seasonDisplay = document.getElementById('season-display');
+                this.seasonHud = document.getElementById('season-hud');
                 this.goldDisplay = document.getElementById('gold-display'); 
                 this.sheepDisplay = document.getElementById('sheep-display');
                 this.hayDisplay = document.getElementById('hay-display'); 
@@ -1952,6 +2011,13 @@
                 this.wolfSkinDisplay.textContent = this.game.gameState.wolfSkin;
                 this.woolDisplay.textContent = this.game.gameState.wool;
                 this.fenceDisplay.textContent = this.game.gameState.fences;
+
+                // Season HUD
+                const season = this.game.gameState.season;
+                const seasonIcons = { Spring: '🌸', Summer: '☀️', Autumn: '🍂', Winter: '❄️' };
+                const seasonNames = { Spring: '봄', Summer: '여름', Autumn: '가을', Winter: '겨울' };
+                this.seasonHud.querySelector('span:first-child').textContent = seasonIcons[season];
+                this.seasonDisplay.textContent = seasonNames[season];
 
                 // 상인 HUD 업데이트
                 if (this.game.gameState.merchantState === 'present') {
@@ -2455,4 +2521,3 @@
     </script>
 </body>
 </html>
-�

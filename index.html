@@ -1379,7 +1379,7 @@
                 ctx.fillStyle = 'white';
                 ctx.textAlign = 'center';
                 ctx.font = '18px sans-serif';
-                ctx.fillText('�', this.x, this.y + 6);
+                ctx.fillText('💰', this.x, this.y + 6);
             }
         }
         
@@ -1424,33 +1424,43 @@
                     return;
                 }
                 
+                // --- 상태 결정 로직 ---
                 const dangers = this.game.entities.filter(e => 
                     (e instanceof Wolf && utils.distance(this, e) < 200) ||
                     ((e instanceof Shepherd || e instanceof Dog) && utils.distance(this, e) < 100)
                 );
-                const inPasture = this.game.isInsidePasture(this);
                 const currentFoodSource = this.getCurrentFoodSource();
 
                 if (dangers.length > 0) {
                     this.state = 'fleeing';
-                }
-                else if (currentFoodSource && this.hunger < 95) {
+                } else if (currentFoodSource && this.hunger < 95) {
                     this.state = 'eating';
-                }
-                else if (this.hunger <= 50) {
-                    this.state = 'seeking_food';
-                }
-                else {
+                } else if (this.hunger <= 50) {
+                    const foodTarget = this.findClosestFood();
+                    if (foodTarget) {
+                        this.state = 'seeking_food';
+                        this.target = foodTarget;
+                    } else {
+                        // 먹이가 없으면 리더를 따라감
+                        if (!this.isAdult && this.findClosest(Sheep, this.perceptionRange, s => s.isAdult)) {
+                            this.state = 'following_adult';
+                        } else if (this.isAdult && !this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this) {
+                            this.state = 'following_leader';
+                        } else {
+                            this.state = 'wandering';
+                        }
+                    }
+                } else {
+                    // 배고프지 않을 때의 기본 행동
                     if (!this.isAdult && this.findClosest(Sheep, this.perceptionRange, s => s.isAdult)) {
                         this.state = 'following_adult';
-                    }
-                    else if (!this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this) {
+                    } else if (!this.isLeader && this.game.leaderSheep && this.game.leaderSheep !== this) {
                         this.state = 'following_leader';
-                    }
-                    else {
+                    } else {
                         this.state = 'wandering';
                     }
                 }
+
 
                 let finalDx = 0, finalDy = 0;
                 let isMoving = true;
@@ -1475,7 +1485,7 @@
                                 currentFoodSource.tileObject.richness--;
                                 this.game.logMessage(`${this.name}이(가) 풀을 먹어 배부름이 10 올랐습니다.`);
                                 if (currentFoodSource.tileObject.richness <= 0) {
-                                    currentFoodSource.tileObject.regrowthTimer = 10; // 수정된 부분
+                                    currentFoodSource.tileObject.regrowthTimer = 10;
                                 }
                             } else if (currentFoodSource.type === 'hay') {
                                 this.hunger = Math.min(100, this.hunger + 30);
@@ -1488,14 +1498,12 @@
                         break;
 
                     case 'seeking_food':
-                        const foodTarget = this.findClosestFood();
-                        if (foodTarget) {
-                            this.target = foodTarget;
+                        if (this.target) {
                             const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
                             finalDx = Math.cos(angle);
                             finalDy = Math.sin(angle);
                         } else {
-                            this.state = 'wandering';
+                           isMoving = false;
                         }
                         break;
 
@@ -1811,7 +1819,7 @@
 
                 // --- 모닥불 로직: 안전 구역 진입 방지 ---
                 if (this.game.isInsideCampfireZone(this)) {
-                    const cf = this.game.world.campfire;
+                    const cf = this.world.campfire;
                     const dist = utils.distance(this, cf);
                     if (dist < cf.safeRadius) {
                         const overlap = cf.safeRadius - dist;
@@ -2683,4 +2691,3 @@
     </script>
 </body>
 </html>
-�

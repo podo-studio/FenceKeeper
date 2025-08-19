@@ -239,12 +239,16 @@
 
                 <h2>4. 주요 활동</h2>
                 <h3>양 관리</h3>
-                <p>양을 클릭하면 정보 창이 열리며, 다음과 같은 행동을 할 수 있습니다.</p>
+                <p>양을 클릭하면 상호작용 메뉴가 나타납니다.</p>
                 <ul>
-                    <li><strong>이름 변경:</strong> 양의 이름을 자유롭게 바꿀 수 있습니다.</li>
-                    <li><strong>털 깎기:</strong> 성인 양의 털을 깎아 양털 1개를 얻습니다. 털을 깎은 양은 5일 동안 털을 깎을 수 없습니다.</li>
-                    <li><strong>판매:</strong> 상인 근처로 양을 데려가면 양을 시장 가격으로 판매할 수 있습니다. (성인 양: 5골드, 새끼 양: 2골드)</li>
-                    <li><strong>도축:</strong> 양을 도축하여 식량을 얻습니다. (성인 양: 식량 3, 새끼 양: 식량 1)</li>
+                    <li><strong>끌고 다니기:</strong> 양치기 가까이에서 양을 클릭하면 양을 끌고 다니거나 놓아줄 수 있습니다. 한 번에 성인 양 1마리 또는 새끼 양 2마리까지 끌 수 있습니다. (성인 양과 새끼 양 동시에는 불가)</li>
+                    <li><strong>정보 보기:</strong> 양치기와 멀리 떨어진 양을 클릭하면 정보 창이 열립니다. 정보 창에서는 다음과 같은 행동을 할 수 있습니다:</li>
+                    <ul>
+                        <li><strong>이름 변경:</strong> 양의 이름을 자유롭게 바꿀 수 있습니다.</li>
+                        <li><strong>털 깎기:</strong> 성인 양의 털을 깎아 양털 1개를 얻습니다. 털을 깎은 양은 5일 동안 털을 깎을 수 없습니다.</li>
+                        <li><strong>판매:</strong> 상인 근처로 양을 데려가면 양을 시장 가격으로 판매할 수 있습니다. (성인 양: 5골드, 새끼 양: 2골드)</li>
+                        <li><strong>도축:</strong> 양을 도축하여 식량을 얻습니다. (성인 양: 식량 3, 새끼 양: 식량 1)</li>
+                    </ul>
                 </ul>
                 <h3>개 관리</h3>
                 <ul>
@@ -1276,6 +1280,7 @@
                 super(game, x, y, 15, '#3498db'); 
                 this.speed = config.SHEPHERD_SPEED; 
                 this.name = '양치기';
+                this.draggedSheep = []; // 끌고 다니는 양 배열
             }
             update(deltaTime) {
                 const dxInput = this.game.input.moveX;
@@ -1287,7 +1292,64 @@
                     const dy = (dyInput / magnitude) * this.speed;
                     this.applyMovement(dx, dy);
                 }
+                
+                // 끌고 다니는 양 위치 업데이트
+                this.draggedSheep.forEach((sheep, index) => {
+                    const angle = Math.atan2(this.y - sheep.y, this.x - sheep.x);
+                    const targetDist = this.radius + sheep.radius + 10 + (index * 5);
+                    const targetX = this.x - Math.cos(angle) * targetDist;
+                    const targetY = this.y - Math.sin(angle) * targetDist;
+                    
+                    // 부드러운 이동
+                    sheep.x += (targetX - sheep.x) * 0.1;
+                    sheep.y += (targetY - sheep.y) * 0.1;
+                });
+                
                 super.update(deltaTime);
+            }
+
+            draw(ctx) {
+                super.draw(ctx);
+                // 양과 연결된 밧줄 그리기
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = 2;
+                this.draggedSheep.forEach(sheep => {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(sheep.x, sheep.y);
+                    ctx.stroke();
+                });
+            }
+
+            toggleDragSheep(sheep) {
+                const isDragging = this.draggedSheep.includes(sheep);
+
+                if (isDragging) {
+                    this.draggedSheep = this.draggedSheep.filter(s => s !== sheep);
+                    sheep.isDragged = false;
+                    this.game.logMessage(`${sheep.name}을(를) 놓아주었습니다.`);
+                } else {
+                    const adultsDragged = this.draggedSheep.filter(s => s.isAdult).length;
+                    const lambsDragged = this.draggedSheep.filter(s => !s.isAdult).length;
+
+                    if (sheep.isAdult) {
+                        if (adultsDragged === 0 && lambsDragged === 0) {
+                            this.draggedSheep.push(sheep);
+                            sheep.isDragged = true;
+                            this.game.logMessage(`${sheep.name}을(를) 끌고 다닙니다.`);
+                        } else {
+                            this.game.logMessage("성인 양은 한 마리만 끌 수 있으며, 다른 양과 함께 끌 수 없습니다.");
+                        }
+                    } else { // 새끼 양
+                        if (adultsDragged === 0 && lambsDragged < 2) {
+                            this.draggedSheep.push(sheep);
+                            sheep.isDragged = true;
+                            this.game.logMessage(`${sheep.name}을(를) 끌고 다닙니다.`);
+                        } else {
+                            this.game.logMessage("새끼 양은 최대 두 마리까지 끌 수 있으며, 성인 양과 함께 끌 수 없습니다.");
+                        }
+                    }
+                }
             }
         }
 
@@ -1341,9 +1403,11 @@
                 this.name = `양 #${Math.floor(Math.random() * 1000)}`;
                 this.perceptionRange = 100;
                 this.eatingTimer = 0;
+                this.isDragged = false; // 끌려다니는 상태
             }
 
             update(deltaTime) {
+                // 배고픔 로직은 끌려다니는 상태와 관계없이 항상 적용
                 this.stateTimer -= 1;
                 this.hunger -= 0.01;
                 if (this.hunger <= 0) {
@@ -1355,6 +1419,12 @@
                     }
                 }
 
+                // 끌려다니는 중이면 스스로 움직이지 않음
+                if (this.isDragged) {
+                    super.update(deltaTime); // 충돌 해결 등 기본 업데이트는 수행
+                    return;
+                }
+                
                 const dangers = this.game.entities.filter(e => 
                     (e instanceof Wolf && utils.distance(this, e) < 200) ||
                     ((e instanceof Shepherd || e instanceof Dog) && utils.distance(this, e) < 100)
@@ -1599,6 +1669,10 @@
                 const originalColor = this.color;
                 if (this.isSheared) {
                     this.color = '#cccccc';
+                }
+                // 끌려다니는 양은 다른 색으로 표시
+                if (this.isDragged) {
+                    this.color = '#f1c40f'; // 노란색
                 }
                 
                 super.draw(ctx);
@@ -1887,7 +1961,12 @@
 
                 for (const entity of this.game.entities) {
                     if (entity instanceof Sheep && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {
-                        this.game.ui.toggleSheepInfoModal(true, entity);
+                        const distToShepherd = utils.distance(this.game.shepherd, entity);
+                        if (distToShepherd < 50) { // 양치기 근처에 있을 때
+                            this.game.shepherd.toggleDragSheep(entity);
+                        } else { // 멀리 있을 때
+                            this.game.ui.toggleSheepInfoModal(true, entity);
+                        }
                         return; 
                     }
                     if (entity instanceof Dog && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {

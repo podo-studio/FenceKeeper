@@ -2630,9 +2630,15 @@
                     const sheepToSell = this.game.entities.filter(e => e instanceof Sheep && !e.isDead && e.isAdult === isAdult && utils.distance(e, merchant) < 100);
                     if (sheepToSell.length >= qty) {
                         for(let i=0; i<qty; i++) {
-                            sheepToSell[i].isDead = true;
-                            this.game.logMessage(`${sheepToSell[i].name}이(가) 시장에 판매되었습니다.`);
-                            sheepToSell[i].deathLogged = true;
+                            const soldSheep = sheepToSell[i];
+                            soldSheep.isDead = true;
+                            this.game.logMessage(`${soldSheep.name}이(가) 시장에 판매되었습니다.`);
+                            soldSheep.deathLogged = true;
+                            
+                            const index = this.game.shepherd.draggedSheep.indexOf(soldSheep);
+                            if (index > -1) {
+                                this.game.shepherd.draggedSheep.splice(index, 1);
+                            }
                         }
                         this.game.gameState.gold += prices[item] * qty;
                         this.game.ui.showMessage(`${qty} ${item.replace('_', ' ')} 판매 완료!`, 'success');

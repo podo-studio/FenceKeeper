@@ -180,10 +180,10 @@
             <p class="font-bold mb-1">게임 로그</p>
         </div>
 
-        <div id="build-mode-indicator" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg text-xl font-bold pointer-events-none">
+        <div id="build-mode-indicator" class="hidden absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg text-xl font-bold pointer-events-none">
             건설 모드
         </div>
-        <div id="cut-mode-indicator" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg text-xl font-bold pointer-events-none">
+        <div id="cut-mode-indicator" class="hidden absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-lg text-xl font-bold pointer-events-none">
             풀베기 모드
         </div>
     </div>
@@ -260,14 +260,13 @@
                 <h3>풀 베기</h3>
                 <ul>
                     <li>'풀 베기' 버튼을 눌러 풀베기 모드를 켜고 끌 수 있습니다.</li>
-                    <li>모드가 켜진 상태에서 완전히 자란 풀(3단계)을 클릭하면 풀을 베어 건초 1개를 획득할 수 있습니다.</li>
+                    <li>모드가 켜진 상태에서 양치기 근처에 있는 완전히 자란 풀(3단계)을 클릭하면 풀을 베어 건초 1개를 획득할 수 있습니다.</li>
                     <li>덜 자란 풀은 벨 수 없습니다.</li>
                 </ul>
                 <h3>울타리 건설</h3>
                 <ul>
                     <li><strong>건설 모드:</strong> '울타리 짓기' 버튼을 눌러 건설 모드를 켜고 끌 수 있습니다. 모드가 켜지면 버튼이 파란색으로 변하고, 화면 중앙에 "건설 모드" 텍스트가 표시됩니다.</li>
-                    <li><strong>설치:</strong> 건설 모드에서 설치하고 싶은 타일을 클릭하면 울타리가 설치되며, 보유한 울타리 개수가 1 줄어듭니다.</li>
-                    <li><strong>철거:</strong> 건설 모드에서 이미 설치된 울타리를 클릭하면 철거되며, 울타리를 다시 회수합니다.</li>
+                    <li><strong>설치/철거:</strong> 건설 모드에서는 양치기 근처에서만 울타리를 설치하거나 철거할 수 있습니다.</li>
                 </ul>
                 <h3>상인과 시장</h3>
                 <ul>
@@ -1380,7 +1379,7 @@
                 ctx.fillStyle = 'white';
                 ctx.textAlign = 'center';
                 ctx.font = '18px sans-serif';
-                ctx.fillText('💰', this.x, this.y + 6);
+                ctx.fillText('�', this.x, this.y + 6);
             }
         }
         
@@ -1909,11 +1908,21 @@
                 const rect = this.game.canvas.getBoundingClientRect();
                 const worldX = e.clientX - rect.left + this.game.camera.x;
                 const worldY = e.clientY - rect.top + this.game.camera.y;
+                const shepherd = this.game.shepherd;
 
                 if (this.game.isBuildMode) {
                     const gridX = Math.floor(worldX / config.FENCE_SIZE);
                     const gridY = Math.floor(worldY / config.FENCE_SIZE);
                     const fenceKey = `${gridX},${gridY}`;
+                    
+                    const fenceWorldX = gridX * config.FENCE_SIZE + config.FENCE_SIZE / 2;
+                    const fenceWorldY = gridY * config.FENCE_SIZE + config.FENCE_SIZE / 2;
+                    const distToFence = utils.distance(shepherd, { x: fenceWorldX, y: fenceWorldY });
+
+                    if (distToFence > 100) {
+                        this.game.logMessage("너무 멀어서 울타리를 지을 수 없습니다.");
+                        return;
+                    }
 
                     if (this.game.world.fences.has(fenceKey)) {
                         this.game.world.fences.delete(fenceKey);
@@ -1942,6 +1951,15 @@
                     const gridX = Math.floor(worldX / config.GRASS_TILE_SIZE);
                     const gridY = Math.floor(worldY / config.GRASS_TILE_SIZE);
                     
+                    const grassWorldX = gridX * config.GRASS_TILE_SIZE + config.GRASS_TILE_SIZE / 2;
+                    const grassWorldY = gridY * config.GRASS_TILE_SIZE + config.GRASS_TILE_SIZE / 2;
+                    const distToGrass = utils.distance(shepherd, { x: grassWorldX, y: grassWorldY });
+
+                    if (distToGrass > 80) {
+                        this.game.logMessage("너무 멀어서 풀을 벨 수 없습니다.");
+                        return;
+                    }
+
                     const tileInfo = this.game.getGrassTileAt(gridX, gridY);
 
                     if (tileInfo) {
@@ -2665,3 +2683,4 @@
     </script>
 </body>
 </html>
+�

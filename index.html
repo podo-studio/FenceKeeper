@@ -164,7 +164,7 @@
 
         <div class="absolute bottom-2 right-2 flex flex-col gap-2">
             <button id="cut-grass-button" class="hud-item">🌿 풀 베기</button>
-            <button id="build-fence-button" class="hud-item">� 울타리 짓기</button>
+            <button id="build-fence-button" class="hud-item">🧱 울타리 짓기</button>
             <button id="feed-shepherd-button" class="hidden hud-item">🍖 양치기 밥주기</button>
             <button id="hay-action-button" class="hidden hud-item"></button>
             <button id="gate-button" class="hidden hud-item"> 문 닫기</button>
@@ -344,6 +344,7 @@
                     <p class="text-sm font-medium text-gray-700">상태</p>
                     <p id="sheep-status-info" class="mt-1 p-2 bg-gray-100 rounded-md"></p>
                 </div>
+                <button id="sheep-release-button" class="hidden w-full bg-gray-500 text-white p-2 rounded-md hover:bg-gray-600">놓아주기</button>
                 <div class="grid grid-cols-2 gap-2">
                     <button id="sheep-shear-button" class="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600">털 깎기</button>
                     <button id="sheep-sell-button" class="w-full bg-yellow-500 text-white p-2 rounded-md hover:bg-yellow-600">판매</button>
@@ -1010,7 +1011,7 @@
                         if (side === 0) { x = 0; y = Math.random() * this.world.height; }
                         else if (side === 1) { x = this.world.width; y = Math.random() * this.world.height; }
                         else if (side === 2) { x = Math.random() * this.world.width; y = 0; }
-                        else { x = Math.random() * this.world.width; y = this.world.height; }
+                        else { x = Math.random() * this.world.height; y = this.world.height; }
                         this.entities.push(new Wolf(this, x, y));
                     }
                 }
@@ -1780,16 +1781,17 @@
                 this.name = `늑대 #${Math.floor(Math.random() * 1000)}`;
             }
             update(deltaTime) {
-                if (this.isDead) return;
+                const game = this.game;
+                if (!game || this.isDead) return;
 
                 // --- 모닥불 로직: 타겟이 안전 구역에 들어가면 추격 포기 ---
-                if (this.target && this.game.isInsideCampfireZone(this.target)) {
+                if (this.target && game.isInsideCampfireZone(this.target)) {
                     this.target = null;
                 }
 
                 if (this.hp <= 0 && !this._skinDropped) {
-                    this.game.gameState.wolfSkin++;
-                    this.game.logMessage(`늑대 ${this.name || ''}가 죽고 늑대 가죽을 획득했습니다. (총 ${this.game.gameState.wolfSkin}개)`);
+                    game.gameState.wolfSkin++;
+                    game.logMessage(`늑대 ${this.name || ''}가 죽고 늑대 가죽을 획득했습니다. (총 ${game.gameState.wolfSkin}개)`);
                     this._skinDropped = true;
                     this.isDead = true;
                     this.deathLogged = true;
@@ -1806,14 +1808,14 @@
                         this.target.hp -= 1;
                         if (this.target.hp <= 0 && !this.target.isDead && !this.target.deathLogged) {
                             if (this.target instanceof Sheep) {
-                                this.game.logMessage(`늑대 ${this.name || ''}이(가) ${this.target.name}을(를) 공격하여 죽였습니다.`);
+                                game.logMessage(`늑대 ${this.name || ''}이(가) ${this.target.name}을(를) 공격하여 죽였습니다.`);
                                 this.target.deathLogged = true;
                                 this.target.hp = 0;
                             } else if (this.target instanceof Shepherd) {
-                                this.game.logMessage(`늑대 ${this.name || ''}이(가) 양치기 ${this.target.name || ''}를 공격하여 죽였습니다.`);
+                                game.logMessage(`늑대 ${this.name || ''}이(가) 양치기 ${this.target.name || ''}를 공격하여 죽였습니다.`);
                                 this.target.deathLogged = true;
                             } else if (this.target instanceof Dog) {
-                                this.game.logMessage(`늑대 ${this.name || ''}이(가) 개 ${this.target.name || ''}를 공격하여 죽였습니다.`);
+                                game.logMessage(`늑대 ${this.name || ''}이(가) 개 ${this.target.name || ''}를 공격하여 죽였습니다.`);
                                 this.target.deathLogged = true;
                             }
                         }
@@ -1821,13 +1823,13 @@
                 }
 
                 // --- 모닥불 로직: 안전 구역 진입 방지 ---
-                if (this.game.isInsideCampfireZone(this)) {
-                    const cf = this.world.campfire;
+                if (game.world && game.isInsideCampfireZone(this)) {
+                    const cf = game.world.campfire;
                     const dist = utils.distance(this, cf);
                     if (dist < cf.safeRadius) {
                         const overlap = cf.safeRadius - dist;
                         const angle = Math.atan2(this.y - cf.y, this.x - cf.x);
-                        this.x += Math.cos(angle) * (overlap + 1); // 약간 더 밀어내서 확실히 밖으로 보냄
+                        this.x += Math.cos(angle) * (overlap + 1);
                         this.y += Math.sin(angle) * (overlap + 1);
                     }
                 }
@@ -1835,11 +1837,13 @@
                 super.update(deltaTime);
             }
             findTarget() {
-                // --- 모닥불 로직: 안전 구역에 있는 대상은 제외 ---
-                let potentialTargets = this.game.entities.filter(e => 
+                const game = this.game;
+                if (!game || !game.world) return null;
+                
+                let potentialTargets = game.entities.filter(e => 
                     (e instanceof Sheep || e instanceof Dog || e instanceof Shepherd) && 
                     !e.isDead &&
-                    !this.game.isInsideCampfireZone(e)
+                    !game.isInsideCampfireZone(e)
                 );
                 potentialTargets.sort((a,b) => utils.distance(this, a) - utils.distance(this, b));
                 return potentialTargets[0] || null;
@@ -1990,13 +1994,17 @@
 
                 for (const entity of this.game.entities) {
                     if (entity instanceof Sheep && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {
-                        const distToShepherd = utils.distance(this.game.shepherd, entity);
-                        if (distToShepherd < 50) { // 양치기 근처에 있을 때
-                            this.game.shepherd.toggleDragSheep(entity);
-                        } else { // 멀리 있을 때
+                        if (this.game.shepherd.draggedSheep.includes(entity)) {
                             this.game.ui.toggleSheepInfoModal(true, entity);
+                        } else {
+                            const distToShepherd = utils.distance(this.game.shepherd, entity);
+                            if (distToShepherd < 50) {
+                                this.game.shepherd.toggleDragSheep(entity);
+                            } else {
+                                this.game.ui.toggleSheepInfoModal(true, entity);
+                            }
                         }
-                        return; 
+                        return;
                     }
                     if (entity instanceof Dog && utils.distance({x: worldX, y: worldY}, entity) < entity.radius) {
                         this.game.ui.toggleDogInfoModal(true, entity);
@@ -2379,6 +2387,7 @@
                     const slaughterBtn = document.getElementById('sheep-slaughter-button');
                     const shearBtn = document.getElementById('sheep-shear-button');
                     const sellBtn = document.getElementById('sheep-sell-button');
+                    const releaseBtn = document.getElementById('sheep-release-button');
                     
                     input.value = sheep.name;
                     
@@ -2393,6 +2402,16 @@
                         if (input.value) sheep.name = input.value.substring(0, 15);
                         this.toggleSheepInfoModal(false);
                     };
+
+                    if (this.game.shepherd.draggedSheep.includes(sheep)) {
+                        releaseBtn.classList.remove('hidden');
+                        releaseBtn.onclick = () => {
+                            this.game.shepherd.toggleDragSheep(sheep);
+                            this.toggleSheepInfoModal(false);
+                        };
+                    } else {
+                        releaseBtn.classList.add('hidden');
+                    }
                     
                     if (sheep.isAdult) {
                         shearBtn.classList.remove('hidden');
@@ -2424,16 +2443,31 @@
                         this.toggleConfirmModal(true, message, () => {
                             this.game.gameState.food += foodGained;
                             sheep.isDead = true;
+                            const index = this.game.shepherd.draggedSheep.indexOf(sheep);
+                            if (index > -1) {
+                                this.game.shepherd.draggedSheep.splice(index, 1);
+                            }
                             this.game.logMessage(`${sheep.name}을(를) 도축하여 식량 ${foodGained}을(를) 얻었습니다.`);
                             this.toggleSheepInfoModal(false);
                         });
                     };
 
-                    // 판매 버튼 활성화 조건 변경
                     const merchant = this.game.merchant;
                     const canSell = merchant && !merchant.isDead && utils.distance(sheep, merchant) < 100 && utils.distance(this.game.shepherd, merchant) < 100;
-                    sellBtn.disabled = !canSell;
-                    sellBtn.title = canSell ? '' : '상인에게 양과 함께 가까이 가야 판매할 수 있습니다.';
+
+                    if (canSell) {
+                        sellBtn.disabled = false;
+                        sellBtn.textContent = '판매';
+                        sellBtn.classList.remove('bg-gray-500', 'cursor-not-allowed');
+                        sellBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                        sellBtn.title = '양을 시장에 판매합니다.';
+                    } else {
+                        sellBtn.disabled = true;
+                        sellBtn.textContent = '판매 불가';
+                        sellBtn.classList.add('bg-gray-500', 'cursor-not-allowed');
+                        sellBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                        sellBtn.title = '상인에게 양과 함께 가까이 가야 판매할 수 있습니다.';
+                    }
 
                     sellBtn.onclick = () => {
                         if (!canSell) return;
@@ -2443,6 +2477,10 @@
                         this.toggleConfirmModal(true, message, () => {
                             this.game.gameState.gold += price;
                             sheep.isDead = true;
+                            const index = this.game.shepherd.draggedSheep.indexOf(sheep);
+                            if (index > -1) {
+                                this.game.shepherd.draggedSheep.splice(index, 1);
+                            }
                             this.game.logMessage(`${sheep.name}을(를) ${price}골드에 판매했습니다.`);
                             this.toggleSheepInfoModal(false);
                         });
@@ -2694,4 +2732,3 @@
     </script>
 </body>
 </html>
-�

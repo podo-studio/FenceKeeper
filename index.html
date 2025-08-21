@@ -559,7 +559,8 @@
                     for (let r = 0; r < rows; r++) {
                         patch.tiles[r] = [];
                         for (let c = 0; c < cols; c++) {
-                            patch.tiles[r][c] = { richness: 1, maxRichness: 3, regrowthTimer: 0 };
+                            const richness = (r + c) % 2 === 0 ? 1 : 0; // 격자 패턴
+                            patch.tiles[r][c] = { richness: richness, maxRichness: 3, regrowthTimer: 0 };
                         }
                     }
                     this.world.grassPatches.push(patch);
@@ -917,7 +918,16 @@
                         this.world.grassPatches.forEach(p => p.tiles.forEach(row => row.forEach(tile => tile.richness = 0)));
                         this.logMessage("겨울이 되어 모든 풀이 사라졌습니다.");
                     } else if (newSeason === 'Spring') {
-                        this.world.grassPatches.forEach(p => p.tiles.forEach(row => row.forEach(tile => tile.richness = 1)));
+                        this.world.grassPatches.forEach(p => {
+                            for (let r = 0; r < p.tiles.length; r++) {
+                                for (let c = 0; c < p.tiles[r].length; c++) {
+                                    // 격자 패턴에만 풀이 자라도록 함
+                                    if ((r + c) % 2 === 0) {
+                                        p.tiles[r][c].richness = 1;
+                                    }
+                                }
+                            }
+                        });
                         this.logMessage("봄이 되어 풀이 다시 자라나기 시작합니다.");
                     } else if (newSeason === 'Autumn') {
                         this.logMessage("가을이 되어 풀이 더 이상 자라지 않습니다.");

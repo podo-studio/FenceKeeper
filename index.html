@@ -247,7 +247,7 @@
                         <li><strong>이름 변경:</strong> 양의 이름을 자유롭게 바꿀 수 있습니다.</li>
                         <li><strong>털 깎기:</strong> 끌고 다니는 성인 양의 털을 깎아 양털 1개를 얻습니다. 털을 깎은 양은 5일 동안 털을 깎을 수 없습니다.</li>
                         <li><strong>판매:</strong> 상인 근처로 양을 데려가면 양을 시장 가격으로 판매할 수 있습니다. (성인 양: 5골드, 새끼 양: 2골드)</li>
-                        <li><strong>도축:</strong> 양을 도축하여 식량을 얻습니다. (성인 양: 식량 3, 새끼 양: 식량 1)</li>
+                        <li><strong>도축:</strong> 끌고 다니는 양을 도축하여 식량을 얻습니다. (성인 양: 식량 3, 새끼 양: 식량 1)</li>
                     </ul>
                 </ul>
                 <h3>개 관리</h3>
@@ -2407,6 +2407,14 @@
                         shearBtn.classList.add('hidden');
                     }
 
+                    if (!isDragged) {
+                        slaughterBtn.disabled = true;
+                        slaughterBtn.textContent = '끌고와야 도축 가능';
+                    } else {
+                        slaughterBtn.disabled = false;
+                        slaughterBtn.textContent = '도축';
+                    }
+
                     shearBtn.onclick = () => {
                         const isCurrentlyDragged = this.game.shepherd.draggedSheep.includes(sheep);
                         if (sheep.isAdult && sheep.shearCooldown === 0 && isCurrentlyDragged) {
@@ -2419,6 +2427,9 @@
                     };
                     
                     slaughterBtn.onclick = () => {
+                        const isCurrentlyDragged = this.game.shepherd.draggedSheep.includes(sheep);
+                        if (!isCurrentlyDragged) return;
+
                         const foodGained = sheep.isAdult ? 3 : 1;
                         const message = `${sheep.name}을(를) 도축하시겠습니까? (식량 ${foodGained} 획득)`;
                         

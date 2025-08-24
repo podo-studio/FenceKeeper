@@ -118,7 +118,7 @@
                     양치기 소년
                 </h1>
 				<p class="text-xs text-gray-500 mt-4 font-jua">
-                    Fencekeeper.v.1.0
+                    Fencekeeper.v.1.1
                 </p>
                 <button id="startButton" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full text-2xl shadow-lg transform hover:scale-105 transition-transform duration-300 mt-12">
                     게임 시작
@@ -984,13 +984,33 @@
             }
 
             handleBreedingAndGrowth() {
-                const adultSheepInPasture = this.entities.filter(e => e instanceof Sheep && e.isAdult && !e.breedingCooldown && this.isInsidePasture(e));
-                let breedingPairs = Math.floor(adultSheepInPasture.length / 2);
-                for(let i = 0; i < breedingPairs; i++) {
-                    this.entities.push(new Sheep(this, this.world.pasture.x + this.world.pasture.width/2, this.world.pasture.y + this.world.pasture.height/2, false));
-                    adultSheepInPasture[i*2].breedingCooldown = 5;
-                    adultSheepInPasture[i*2+1].breedingCooldown = 5;
+                // *** MODIFIED CODE START ***
+                // Filter for adult sheep that are not on breeding cooldown, regardless of location.
+                const adultSheep = this.entities.filter(e => e instanceof Sheep && e.isAdult && !e.breedingCooldown);
+                
+                // Shuffle the array to get random pairs
+                for (let i = adultSheep.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [adultSheep[i], adultSheep[j]] = [adultSheep[j], adultSheep[i]];
                 }
+                
+                let breedingPairs = Math.floor(adultSheep.length / 2);
+                for(let i = 0; i < breedingPairs; i++) {
+                    const parent1 = adultSheep[i*2];
+                    const parent2 = adultSheep[i*2+1];
+                    
+                    // Spawn the new lamb between the two parents.
+                    const spawnX = (parent1.x + parent2.x) / 2;
+                    const spawnY = (parent1.y + parent2.y) / 2;
+
+                    this.entities.push(new Sheep(this, spawnX, spawnY, false));
+                    this.logMessage('새로운 새끼 양이 태어났습니다!');
+
+                    // Set breeding cooldown for the parents.
+                    parent1.breedingCooldown = 5;
+                    parent2.breedingCooldown = 5;
+                }
+                // *** MODIFIED CODE END ***
             }
 
             spawnWolves() {
